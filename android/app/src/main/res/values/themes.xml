@@ -1,10 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose owns the real theming; this is the launch theme, sized to
-         avoid a white flash before the first frame. -->
+
+    <!--
+      The theme the activity launches with.
+
+      `installSplashScreen()` in MainActivity requires the launch theme to
+      derive from Theme.SplashScreen; with any other parent it throws at
+      startup rather than failing quietly. It hands over to
+      postSplashScreenTheme as soon as the first frame is ready.
+    -->
+    <style name="Theme.Nexora.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/launch_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nexora</item>
+    </style>
+
+    <!--
+      The theme the app runs under. Compose owns the real theming, so this
+      only has to carry the window background — without it there is a flash of
+      the platform default between the splash handing over and the first
+      composition. `launch_background` is defined per-configuration, so it
+      follows light and dark.
+    -->
     <style name="Theme.Nexora" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/launch_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
 </resources>

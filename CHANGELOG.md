@@ -37,6 +37,30 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — the first Kotlin compilation
+
+With resources linking, the compiler ran for the first time and found seven
+errors in three clusters. All three were mine, and two came from files I
+reconstructed in phase 4 after overwriting the originals.
+
+- **`Outcome.getOrNull()`.** The rewritten `Outcome` exposed a `dataOrNull`
+  property that nothing in the codebase used, while `ProfileViewModel` — which
+  I did not write — called `getOrNull()`. Restored as a function, named to
+  match `kotlin.Result` so unwrapping an `Outcome` and unwrapping a
+  `runCatching` read alike. `errorOrNull` became a function for symmetry.
+- **The Retrofit converter was the wrong artifact.** `AppModule` imports
+  `retrofit2.converter.kotlinx.serialization.asConverterFactory`, which is
+  Square's own converter, but the catalog declared JakeWharton's, whose
+  package is `com.jakewharton.retrofit2.converter…`. Switched to
+  `com.squareup.retrofit2:converter-kotlinx-serialization`, versioned from the
+  same `retrofit` reference so the two cannot drift apart.
+- **The splash screen library was never declared.** `MainActivity` called
+  `installSplashScreen()` with nothing providing it. Adding the dependency
+  alone would have turned a compile error into a launch crash, because that
+  call requires the activity's theme to derive from `Theme.SplashScreen`: so
+  `Theme.Nexora.Starting` now does, hands over via `postSplashScreenTheme`,
+  and draws the launcher foreground on the per-configuration launch colour.
+
 ### Added — CI reports build failures where they can actually be read
 
 A failed Android build could only be diagnosed by someone signed in with

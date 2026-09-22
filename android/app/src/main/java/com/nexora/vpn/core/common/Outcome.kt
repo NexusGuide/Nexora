@@ -19,9 +19,16 @@ sealed interface Outcome<out T> {
      */
     data class Failure(val error: AppError) : Outcome<Nothing>
 
-    val dataOrNull: T? get() = (this as? Success)?.data
+    /**
+     * The success value, or null on failure.
+     *
+     * A function rather than a property, and named to match `kotlin.Result`,
+     * so call sites read the same whether they are unwrapping an [Outcome] or
+     * the result of a `runCatching`.
+     */
+    fun getOrNull(): T? = (this as? Success)?.data
 
-    val errorOrNull: AppError? get() = (this as? Failure)?.error
+    fun errorOrNull(): AppError? = (this as? Failure)?.error
 
     val isSuccess: Boolean get() = this is Success
 }
