@@ -86,15 +86,34 @@ jobs:
       - name: Make the wrapper executable
         run: chmod +x ./gradlew
 
+      # Each Gradle step keeps its output, so the step after them can turn a
+      # failure into annotations. pipefail matters: without it the exit status
+      # would be tee's, and a failing build would report success.
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee -a gradle-output.log
 
       - name: Lint
-        run: ./gradlew :app:lintDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:lintDebug --stacktrace 2>&1 | tee -a gradle-output.log
         continue-on-error: true
 
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee -a gradle-output.log
+
+      # A step log is readable only to someone signed in with access to this
+      # repository; annotations and the job summary are readable by anyone.
+      # Without this, diagnosing a failed build means a person opening the log
+      # and copying it out by hand.
+      - name: Surface the compiler errors
+        if: failure()
+        # Invoked through bash rather than executed directly, so it does not
+        # matter whether the executable bit survived a commit from Windows.
+        run: bash ../scripts/ci-annotate-gradle.sh gradle-output.log
 
       - name: Name the APK after the commit
         id: apk
@@ -122,6 +141,7 @@ jobs:
           path: |
             android/app/build/reports/
             android/app/build/outputs/logs/
+            android/gradle-output.log
           if-no-files-found: ignore
           retention-days: 14
 

@@ -37,6 +37,23 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Added — CI reports build failures where they can actually be read
+
+A failed Android build could only be diagnosed by someone signed in with
+repository access opening the step log and copying it out by hand. Annotations
+and the job summary, unlike step logs, render for any viewer.
+
+- **`scripts/ci-annotate-gradle.sh`** parses a failed Gradle run and emits a
+  GitHub annotation per error, anchored to the right file, line and column, so
+  the failure appears on the run summary and inline on the diff. It handles
+  the three shapes this project produces — Kotlin/Java compiler errors, AAPT
+  resource errors, and Gradle's own "What went wrong" block — skips warnings,
+  and caps output at 40 so a cascade cannot bury the first real error.
+- The Gradle steps now `tee` their output, with `set -o pipefail` so the
+  step's exit status stays Gradle's rather than `tee`'s — without it a failing
+  build would report success.
+- The full Gradle log is uploaded with the reports artifact.
+
 ### Security — dependency advisories
 
 CI's dependency audit was failing, and it was right to. Three packages had
