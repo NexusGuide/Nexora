@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">نکسورا</string>
+
+    <!-- Actions -->
+    <string name="action_retry">تلاش دوباره</string>
+    <string name="action_cancel">انصراف</string>
+    <string name="action_close">بستن</string>
+    <string name="action_continue">ادامه</string>
+    <string name="action_ok">باشه</string>
+
+    <!-- Errors -->
+    <string name="error_network">اتصالی برقرار نیست. اینترنت را بررسی و دوباره تلاش کنید.</string>
+    <string name="error_timeout">پاسخ سرور خیلی طول کشید.</string>
+    <string name="error_server">مشکلی از سمت ما پیش آمد.</string>
+    <string name="error_unknown">مشکلی پیش آمد. دوباره تلاش کنید.</string>
+    <string name="error_session_expired">نشست شما پایان یافت. دوباره وارد شوید.</string>
+    <string name="error_request_id">کد پیگیری: %1$s</string>
+
+    <!-- Auth -->
+    <string name="auth_sign_in">ورود</string>
+    <string name="auth_identifier">نام کاربری یا ایمیل</string>
+    <string name="auth_password">رمز عبور</string>
+    <string name="auth_no_account">حساب ندارید؟ ثبت‌نام کنید</string>
+    <string name="auth_forgot_password">رمز عبور را فراموش کرده‌اید؟</string>
+    <string name="auth_reset_title">بازیابی رمز عبور</string>
+    <string name="auth_reset_sent">اگر حسابی با این مشخصات باشد، لینک بازیابی ارسال شد.</string>
+    <string name="auth_invalid_credentials">این مشخصات با هیچ حسابی مطابقت ندارد</string>
+    <string name="auth_account_locked">تلاش‌های زیاد. چند دقیقه دیگر دوباره امتحان کنید.</string>
+    <string name="auth_account_inactive">این حساب فعال نیست. با پشتیبانی تماس بگیرید.</string>
+
+    <!-- Validation -->
+    <string name="validation_required">این فیلد الزامی است</string>
+    <string name="validation_username_short">نام کاربری خیلی کوتاه است</string>
+    <string name="validation_username_long">نام کاربری خیلی بلند است</string>
+    <string name="validation_username_charset">فقط حروف، عدد و زیرخط مجاز است</string>
+    <string name="validation_password_short">رمز عبور باید حداقل ۸ کاراکتر باشد</string>
+    <string name="validation_password_long">رمز عبور خیلی بلند است</string>
+    <string name="validation_password_lowercase">یک حرف کوچک اضافه کنید</string>
+    <string name="validation_password_uppercase">یک حرف بزرگ اضافه کنید</string>
+    <string name="validation_password_digit">یک عدد اضافه کنید</string>
+    <string name="validation_password_mismatch">رمزها یکسان نیستند</string>
+    <string name="validation_email">یک ایمیل معتبر وارد کنید</string>
+    <string name="validation_phone">یک شماره‌ی معتبر وارد کنید</string>
+
+    <!-- Device limit -->
+    <string name="device_limit_title">به سقف دستگاه‌ها رسیدید</string>
+    <string name="device_limit_body">پلن شما %1$d دستگاه را پشتیبانی می‌کند. برای ورود از اینجا، یکی را حذف کنید.</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">خانه</string>
+    <string name="nav_store">فروشگاه</string>
+    <string name="nav_services">سرویس‌ها</string>
+    <string name="nav_profile">پروفایل</string>
+
+    <!-- Home -->
+    <string name="home_status_connected">متصل</string>
+    <string name="home_status_connecting">در حال اتصال…</string>
+    <string name="home_status_disconnected">قطع</string>
+    <string name="home_connect">اتصال</string>
+    <string name="home_server">سرور</string>
+    <string name="home_ping">پینگ</string>
+    <string name="home_traffic">ترافیک</string>
+    <string name="home_expires">انقضا</string>
+    <string name="home_expires_today">امروز</string>
+    <string name="home_days_remaining">%1$d روز</string>
+    <string name="home_no_subscription">سرویس فعالی ندارید</string>
+    <string name="home_no_subscription_body">برای شروع یک پلن انتخاب کنید.</string>
+    <string name="home_browse_plans">مشاهده پلن‌ها</string>
+    <string name="home_setting_up">در حال آماده‌سازی سرویس</string>
+    <string name="home_setting_up_body">معمولاً کمتر از یک دقیقه طول می‌کشد.</string>
+    <string name="home_vpn_coming">اتصال در نسخه‌ی بعدی اضافه می‌شود</string>
+
+    <!-- Store -->
+    <string name="store_buy">خرید</string>
+    <string name="store_price">%1$s %2$s</string>
+    <string name="store_days">%1$d روز</string>
+    <string name="store_duration">مدت</string>
+    <string name="store_devices">دستگاه</string>
+    <string name="store_traffic">ترافیک</string>
+    <string name="store_unlimited">نامحدود</string>
+    <string name="store_empty">در حال حاضر پلنی موجود نیست</string>
+    <string name="store_order_pending_title">سفارش ثبت شد</string>
+    <string name="store_order_pending_body">برای فعال‌سازی سرویس، پرداخت را تکمیل کنید.</string>
+
+    <!-- Services -->
+    <string name="services_tab_active">فعال</string>
+    <string name="services_tab_expired">منقضی</string>
+    <string name="services_tab_suspended">معلق</string>
+    <string name="services_empty">چیزی اینجا نیست</string>
+    <string name="services_renew">تمدید</string>
+    <string name="services_expiring_soon">به‌زودی منقضی می‌شود</string>
+    <string name="services_traffic_low">ترافیک رو به اتمام است</string>
+    <string name="services_status_pending">در حال آماده‌سازی</string>
+    <string name="services_status_active">فعال</string>
+    <string name="services_status_expired">منقضی</string>
+    <string name="services_status_suspended">معلق</string>
+    <string name="services_status_cancelled">لغو شده</string>
+
+    <!-- Configs -->
+    <string name="configs_title">کانفیگ‌ها</string>
+
+    <!-- Profile -->
+    <string name="profile_devices">دستگاه‌های شما</string>
+    <string name="profile_device_current">این دستگاه</string>
+    <string name="profile_device_revoke">حذف</string>
+    <string name="profile_email_unverified">ایمیل تأیید نشده</string>
+    <string name="profile_sign_out">خروج</string>
+</resources>

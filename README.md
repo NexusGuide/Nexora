@@ -4,12 +4,12 @@ A professional Xray VPN client and service platform: an Android app, a backend
 API, and a web admin panel. Users register, buy a plan, pay, and receive a
 working config automatically — no Telegram required.
 
-> **Status: phase 3 of 8.** The backend is now functionally complete for the
-> purchase-to-connect path: a paid order is provisioned on a real Xray panel by
-> a background worker, and the customer receives working configs. Payment
-> gateways, the Android app and the admin panel are not built yet. Nothing here
-> pretends to work: an unfinished integration returns `501 NOT_IMPLEMENTED`
-> rather than a fake success. See [Roadmap](#roadmap).
+> **Status: phase 4 of 8.** The backend is now functionally complete for the
+> purchase-to-connect path, and the Android client covers sign-in, store,
+> services and configs. The VPN engine, payment gateways and the admin panel
+> are not built yet. Nothing here pretends to work: an unfinished integration
+> returns `501 NOT_IMPLEMENTED` rather than a fake success, and the app's
+> Connect button is disabled with an explanation. See [Roadmap](#roadmap).
 
 ```
 PUBLIC REPOSITORY != PUBLIC SECRETS
@@ -200,7 +200,7 @@ database server.
 | 1 | Repository, Docker, Postgres, Redis, FastAPI, auth | **Done** |
 | 2 | Users, plans, subscriptions, orders | **Done** |
 | 3 | Panel manager, PasarGuard, config system | **Done** |
-| 4 | Android app: login, home, services, store | Not started |
+| 4 | Android app: login, home, services, store | **Done** (unbuilt — no SDK here) |
 | 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
 | 6 | Payment, renewal, expiration, notifications | Not started |
 | 7 | Admin panel, RBAC, logs, analytics | Not started |
@@ -213,6 +213,7 @@ database server.
 - [deployment.md](docs/deployment.md)
 - [panel-adapters.md](docs/panel-adapters.md)
 - [workers.md](docs/workers.md)
+- [android.md](docs/android.md)
 - [contributing.md](docs/contributing.md)
 
 ## License

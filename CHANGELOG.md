@@ -9,6 +9,40 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — phase 4: the Android client
+
+- Kotlin + Jetpack Compose app under `android/`: sign-in, home, store,
+  services, configs, profile and device management, in Persian and English
+  with RTL, and light/dark themes. Clean architecture —
+  feature → domain → data → core, one direction only.
+- **Keystore-backed token storage.** `EncryptedSharedPreferences` keyed from
+  the Android Keystore (spec rule 36). On a device where Keystore
+  initialisation fails it retries after deleting the file and only then falls
+  back to plain storage, recording it in `isUsingInsecureFallback` so the app
+  can tell the user rather than silently downgrading.
+- **A refresh authenticator that cannot sign users out by accident.** The
+  backend revokes a whole token family when a refresh token is reused, so
+  parallel 401s firing parallel refreshes would look like theft and kill every
+  session. Refresh is serialised behind a lock and re-checked inside it. A
+  *rejected* refresh ends the session; an *unreachable* one does not, because a
+  timeout says nothing about whether the session is valid.
+- **Device identity** from a random per-install UUID, never `ANDROID_ID`,
+  IMEI or the advertising ID.
+- Errors classified once into `AppError`, carrying whether a retry could help,
+  with screens branching on the backend's stable error code rather than its
+  message.
+- Release builds are HTTPS-only by network security config; body-level HTTP
+  logging is debug-gated and ProGuard strips `android.util.Log`.
+
+### Notes
+- **The build is unverified.** This environment has no Android SDK, so the app
+  has not been compiled or run. Static checks pass (imports resolve, every
+  referenced string exists in both locales with matching format arguments,
+  ViewModels are annotated), but expect to fix compile errors on the first
+  real build.
+- Connecting is phase 5: the Connect button is present and disabled with an
+  explanation, not a fake success.
+
 ### Added — phase 3.5: the gaps before shipping an app
 
 - **Device limits are enforced.** A plan's device count was stored and sent to

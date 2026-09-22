@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing this app stores may leave the device in a backup.
+
+  The encrypted token store is keyed by Android Keystore, whose keys are not
+  backed up — so a restored copy would be undecryptable anyway. Excluding it
+  outright is clearer than relying on that.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>
