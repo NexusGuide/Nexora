@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher mark: a shield carrying an "N".
+
+  Drawn on the 108dp adaptive-icon canvas. Every launcher masks this to its
+  own shape and may parallax it, so the artwork stays inside the central
+  66dp safe zone (x and y between 21 and 87) — anything outside it can be
+  cropped away on some devices.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield. Teal, matching the app's primary colour. -->
+    <path android:pathData="M54,25 L79,33.5 L79,56 C79,69.5 67.5,78.5 54,83.5 C40.5,78.5 29,69.5 29,56 L29,33.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="29" android:startY="25"
+                android:endX="79" android:endY="83.5"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF5DF2D6" />
+                <item android:offset="1" android:color="#FF00897B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- The N, cut out of the shield in the app's dark navy. -->
+    <path
+        android:fillColor="#FF0B1E2D"
+        android:pathData="M41,42 L48,42 L60,61 L60,42 L67,42 L67,70 L60,70 L48,51 L48,70 L41,70 Z" />
+</vector>

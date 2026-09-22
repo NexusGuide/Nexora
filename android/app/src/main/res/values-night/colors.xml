@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launch_background">#0B1020</color>
+    <!-- Must equal the dark scheme's `background` (Navy, 0xFF0B1E2D). -->
+    <color name="launch_background">#0B1E2D</color>
 </resources>

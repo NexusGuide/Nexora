@@ -37,6 +37,30 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — the first Android build
+
+The first CI build failed in `:app:processDebugResources`, before a line of
+Kotlin was compiled: the manifest referenced `@mipmap/ic_launcher` and
+`@mipmap/ic_launcher_round`, and the app had no `mipmap` directory at all.
+Phase 4 shipped a manifest whose icons were never drawn.
+
+- **Launcher icons**, in the app's own palette (teal shield, navy `N`) rather
+  than a placeholder: an adaptive icon for API 26+, a `<monochrome>` layer for
+  themed icons on API 33+, and real PNGs at five densities because `minSdk` is
+  24 and API 24–25 do not understand adaptive icons. The PNGs are rendered
+  from the same coordinates as the vector, so the two cannot drift apart.
+- **The launch background was wrong in both themes.** `values/` and
+  `values-night/` both held the same navy, so a light-theme launch flashed
+  dark before Compose painted `#F8FAFC`. Each now matches its scheme's
+  `background` in `core/ui/Theme.kt`.
+- **Deleted `values-night/themes.xml`**, which redefined `Theme.Nexora`
+  *without* `windowBackground` — so in dark mode the launch theme fell back to
+  the Material light background, producing exactly the white flash the theme
+  exists to prevent.
+- Audited every `@string`/`@color`/`@drawable`/`@mipmap`/`@xml` reference in
+  the manifest, resources and Kotlin against what is defined. Nothing else is
+  missing, so the next build should reach the compiler.
+
 ### Fixed — the executable bit, and how it went missing
 
 - **`.githooks/pre-commit` and all three `scripts/*.sh` had been rewritten to

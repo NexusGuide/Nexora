@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launch_background">#0B1020</color>
+    <!--
+      The window background shown between process start and Compose's first
+      frame. It must equal the light scheme's `background` in
+      core/ui/Theme.kt (0xFFF8FAFC) — if the two differ, the app opens with a
+      visible flash of the wrong colour. values-night/ carries the dark
+      equivalent.
+    -->
+    <color name="launch_background">#F8FAFC</color>
 </resources>
