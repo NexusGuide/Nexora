@@ -2,28 +2,40 @@
 
 ## Prerequisites
 
-- A Linux host with Docker and Docker Compose v2
+- A Linux host (Ubuntu 22.04+ or Debian 12+). Docker is installed by the deploy script if missing.
 - A domain with DNS pointing at the host (`api.example.com`)
 - Ports 80 and 443 open; **nothing else**
 
 ## First deployment
 
 ```bash
-git clone https://github.com/<your-account>/NexusVPN.git
-cd NexusVPN
-
-./scripts/generate-secrets.sh --write     # creates .env, mode 600
-$EDITOR .env                              # set the production values below
+git clone https://github.com/NexusGuide/Nexora.git
+cd Nexora
+./scripts/deploy.sh api.your-domain.com you@your-email.com
 ```
 
-Production `.env` must have:
+That is the whole thing. The script installs Docker if it is missing,
+generates every secret, renders the nginx config for your domain, applies the
+migrations, obtains the TLS certificate, installs the renewal and backup cron
+jobs, and finishes by calling the API over the public hostname — which is the
+only check that proves DNS, TLS, nginx and the API all agree.
+
+It is safe to re-run. It never regenerates an existing `.env`, because
+rotating `ENCRYPTION_KEY` would make every stored panel credential unreadable.
+
+**The one thing it cannot do for you is DNS.** The domain's A record must
+already point at the server, and the script checks that before doing any work
+— a wrong record otherwise fails at the last step, after several minutes.
+
+### What the script writes into `.env`
 
 ```ini
 APP_ENV=production
 APP_DEBUG=false
-PUBLIC_API_URL=https://api.example.com
-CORS_ORIGINS=https://admin.example.com
-ALLOWED_HOSTS=api.example.com
+NEXUS_DOMAIN=api.your-domain.com
+PUBLIC_API_URL=https://api.your-domain.com
+ALLOWED_HOSTS=api.your-domain.com
+CORS_ORIGINS=https://api.your-domain.com
 ```
 
 The backend refuses to start if `APP_ENV=production` is combined with
@@ -32,30 +44,47 @@ The backend refuses to start if `APP_ENV=production` is combined with
 misconfigured production deploy fails loudly at boot rather than quietly
 serving with the guard rails down.
 
-### TLS
+### How the certificate is obtained
 
-Obtain a certificate before starting nginx:
+There is a bootstrap problem worth understanding, because it is the part that
+most hand-written deployments get stuck on: **nginx will not start without a
+certificate, and certbot cannot obtain one without nginx serving the ACME
+challenge.**
+
+The script breaks the cycle by starting nginx on a throwaway self-signed
+certificate, letting certbot use the webroot that nginx is now serving, then
+replacing the certificate and reloading. Renewal then uses the same webroot,
+so nothing has to be stopped to renew — the cron job at 03:00 renews and
+reloads in place.
+
+### Doing it by hand
+
+If you would rather not run the script:
 
 ```bash
-mkdir -p infrastructure/nginx/certs
-certbot certonly --standalone -d api.example.com -d admin.example.com
-cp /etc/letsencrypt/live/api.example.com/fullchain.pem infrastructure/nginx/certs/
-cp /etc/letsencrypt/live/api.example.com/privkey.pem  infrastructure/nginx/certs/
-chmod 600 infrastructure/nginx/certs/privkey.pem
-```
+./scripts/generate-secrets.sh --write
+$EDITOR .env                                   # set the values listed above
+sed "s|\${NEXUS_DOMAIN}|api.your-domain.com|g" \
+    infrastructure/nginx/nginx.conf.template > infrastructure/nginx/nginx.conf
 
-`infrastructure/nginx/certs/` is git-ignored. Replace `api.example.com` in
-`infrastructure/nginx/nginx.conf` with your domain.
-
-### Start
-
-```bash
 docker compose up -d postgres redis
 docker compose run --rm migrate
-docker compose --profile full up -d
-docker compose ps
-curl https://api.example.com/health
+docker compose up -d --build api worker scheduler
+docker compose --profile full up -d nginx
+docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
+    -d api.your-domain.com --email you@your-email.com --agree-tos --no-eff-email
+docker compose exec nginx nginx -s reload
 ```
+
+`infrastructure/nginx/nginx.conf` is git-ignored: the template is tracked, the
+rendered file carries your domain and stays out of the repository.
+
+### After the first deployment
+
+1. **Back up `ENCRYPTION_KEY`** from `.env`, somewhere that is not this server.
+2. **Set `API_BASE_URL`** to `https://api.your-domain.com/` in the GitHub
+   repository variables, so CI builds an APK that talks to this server.
+3. **Create the first admin account** using `ADMIN_BOOTSTRAP_SECRET` from `.env`.
 
 ## Why Postgres and Redis have no published ports
 

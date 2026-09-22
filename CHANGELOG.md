@@ -37,6 +37,56 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Added — one-command deployment
+
+Deploying meant following a page of manual steps, and one of them could not
+work as written: the nginx config served the ACME challenge from
+`/var/www/certbot`, but nothing mounted that directory and no certbot existed,
+so the certificate had to be obtained out of band and copied in by hand.
+
+- **`scripts/deploy.sh`** takes a domain and an email and does the rest:
+  installs Docker if missing, generates the secrets, renders nginx for the
+  domain, applies migrations, obtains the certificate, installs the renewal
+  and backup cron jobs, and verifies over the public hostname — the only check
+  that proves DNS, TLS, nginx and the API agree. Re-running is safe, and it
+  never regenerates an existing `.env`, because rotating `ENCRYPTION_KEY`
+  would orphan every stored panel credential.
+- **The certificate bootstrap is handled properly.** nginx will not start
+  without a certificate and certbot cannot get one without nginx serving the
+  challenge; the script starts nginx on a throwaway self-signed certificate,
+  issues the real one over the webroot, then reloads. Renewal uses the same
+  webroot, so nothing stops to renew.
+- **The domain is no longer hardcoded.** `nginx.conf` became
+  `nginx.conf.template` with a `${NEXUS_DOMAIN}` placeholder; the rendered
+  file is git-ignored, so no deployment's hostname is committed. Rendering
+  uses `sed`, not `envsubst`, which is absent from a minimal Ubuntu image and
+  would also try to expand nginx's own `$host`.
+- DNS is checked **before** any work, since a wrong A record otherwise fails
+  at the final step after several minutes.
+- `certbot` service and the `certbot_conf` / `certbot_webroot` volumes added
+  to compose; nginx mounts both read-only, because it serves them and certbot
+  writes them.
+
+### Verified — the stack runs on the upgraded dependencies
+
+Booted the API on the new pins and exercised it over HTTP rather than trusting
+the unit tests, since Starlette went from 0.48 to 1.6 and unit tests can pass
+while middleware and lifespan break. Startup, the middleware chain, structured
+logging, migrations, register, login, `/me`, RBAC refusal, and refresh-token
+reuse detection all behave. The rate limiter fails open without Redis, as
+designed.
+
+One thing this proved that had never been checked: **`/auth/refresh` returns
+`{access_token, refresh_token, token_type, expires_in}` directly under `data`,
+which is exactly the shape the Android `TokenPairDto` expects.** The client's
+refresh path had never been compared against a running server.
+
+One honest imprecision found: on reuse detection the API answers "All sessions
+were revoked", but an already-issued access token keeps working until it
+expires, because it is a stateless JWT and only the refresh family is revoked.
+That is a normal trade-off, not a bug, but the message promises more than it
+delivers.
+
 ### The app builds
 
 `nexora-debug-main-f339805.apk`, 19.1 MB, assembled by CI: unit tests pass,

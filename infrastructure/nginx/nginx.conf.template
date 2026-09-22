@@ -1,8 +1,12 @@
 # =============================================================================
 # Nexus VPN reverse proxy (spec rule 40).
 #
-# Certificates are mounted from the host at /etc/nginx/certs and are never part
-# of the repository or the image. Replace api.example.com with your domain.
+# This is a TEMPLATE. scripts/deploy.sh renders it to nginx.conf with
+# ${NEXUS_DOMAIN} substituted; the rendered file is git-ignored, so no
+# deployment's domain is ever committed.
+#
+# Certificates come from the certbot volume and are never in the repository or
+# the image.
 # =============================================================================
 user nginx;
 worker_processes auto;
@@ -46,7 +50,7 @@ http {
     # --- HTTP: redirect everything except the ACME challenge ----------------
     server {
         listen 80;
-        server_name api.example.com admin.example.com;
+        server_name ${NEXUS_DOMAIN};
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -60,10 +64,10 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name api.example.com;
+        server_name ${NEXUS_DOMAIN};
 
-        ssl_certificate     /etc/nginx/certs/fullchain.pem;
-        ssl_certificate_key /etc/nginx/certs/privkey.pem;
+        ssl_certificate     /etc/letsencrypt/live/${NEXUS_DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${NEXUS_DOMAIN}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_prefer_server_ciphers off;
         ssl_session_cache shared:SSL:10m;

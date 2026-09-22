@@ -142,3 +142,9 @@ temp/
 *.tar.gz
 *.zip
 !scripts/**/*.zip
+
+# The nginx config is rendered from nginx.conf.template by scripts/deploy.sh
+# with the real domain substituted in. The template is tracked; the rendered
+# file is per-deployment and stays out of git.
+infrastructure/nginx/nginx.conf
+infrastructure/nginx/certs/
