@@ -9,8 +9,32 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
-### Added
-- Phase 2: plans, orders and subscriptions.
+### Added — phase 2: plans, orders and subscriptions
+
+- `Plan`, `PlanServer`, `Order`, `Payment`, `Subscription` and `Config` tables,
+  with the indexes the spec requires (rule 55) and money stored as `NUMERIC`,
+  never float.
+- **Order idempotency** backed by a UNIQUE constraint on `idempotency_key`, so
+  a duplicate submission loses the insert race in the database rather than
+  relying on a check-then-insert that two requests can both pass. A repeated
+  `POST /orders` returns the original order with 200 instead of 201.
+- **Paid exactly once**: `mark_paid` takes a row lock and reports whether it
+  actually transitioned, so a replayed gateway callback cannot provision a
+  second subscription.
+- **Plan snapshot** stored on each order, so editing a plan's price or quota
+  does not retroactively change what an existing customer bought.
+- Subscription lifecycle: create, activate, renew, suspend, resume, expire,
+  and usage recording that suspends on an exhausted quota. Early renewal
+  extends from the current expiry rather than from today.
+- Endpoints: `/me`, `/me/devices`, `/plans`, `/orders`, `/subscriptions`.
+  Revoking a device also revokes the refresh tokens bound to it.
+- 27 further tests covering idempotency, the state machines and ownership
+  isolation.
+
+### Notes
+- Panel provisioning still belongs to phase 3, so a paid order creates a
+  `PENDING` subscription and `/subscriptions/{id}/refresh` and `/configs`
+  return `501` rather than a fake result.
 
 ## [0.0.1] — 2026-09-22
 

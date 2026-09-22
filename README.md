@@ -4,12 +4,12 @@ A professional Xray VPN client and service platform: an Android app, a backend
 API, and a web admin panel. Users register, buy a plan, pay, and receive a
 working config automatically — no Telegram required.
 
-> **Status: phase 1 of 8.** The repository skeleton, Docker topology, database
-> schema, authentication system, panel abstraction and PasarGuard adapter are
-> implemented and tested. Plans, orders, payments, the Android app and the
-> admin panel are not built yet. Nothing here pretends to work: an unfinished
-> integration returns `501 NOT_IMPLEMENTED` rather than a fake success.
-> See [Roadmap](#roadmap).
+> **Status: phase 2 of 8.** Repository, Docker topology, database schema,
+> authentication, the panel abstraction with a PasarGuard adapter, and now
+> plans, orders and subscriptions are implemented and tested. Payments, panel
+> provisioning, the Android app and the admin panel are not built yet. Nothing
+> here pretends to work: an unfinished integration returns
+> `501 NOT_IMPLEMENTED` rather than a fake success. See [Roadmap](#roadmap).
 
 ```
 PUBLIC REPOSITORY != PUBLIC SECRETS
@@ -57,6 +57,9 @@ a new adapter rather than an edit to the subscription flow.
   and latency, with mandatory redaction applied at the handler.
 - **Docker topology** — api, worker, scheduler, postgres, redis, nginx, with the
   datastores unreachable from outside the compose network.
+- **Idempotent ordering** — a unique constraint, a row lock and a plan snapshot,
+  so a retried request or a replayed payment callback never charges twice or
+  provisions twice.
 
 ## Requirements
 
@@ -160,9 +163,21 @@ All endpoints live under `/api/v1`. Responses use one envelope:
   "request_id": "..." }
 ```
 
-Implemented: `POST /auth/register`, `/auth/login`, `/auth/refresh`,
-`/auth/logout`, `GET /auth/me`, `GET /health`, `/health/database`,
-`/health/redis`. Full schema at `/docs` in development.
+Implemented:
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` |
+| User | `GET`/`PATCH /me`, `GET /me/devices`, `DELETE /me/devices/{id}` |
+| Store | `GET /plans`, `/plans/{id}` |
+| Orders | `POST /orders`, `GET /orders`, `/orders/{id}`, `POST /orders/{id}/cancel` |
+| Subscriptions | `GET /subscriptions`, `/subscriptions/{id}`, `POST /subscriptions/{id}/renew` |
+| Health | `GET /health`, `/health/database`, `/health/redis` |
+
+`POST /orders` is idempotent: send an `idempotency_key` and a retried request
+returns the original order with 200 rather than creating a second one.
+
+Full schema at `/docs` in development.
 
 ## Deployment
 
@@ -176,8 +191,8 @@ database server.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Repository, Docker, Postgres, Redis, FastAPI, auth | **Done** |
-| 2 | Users, plans, subscriptions, orders | Next |
-| 3 | Panel manager, PasarGuard, config system | Adapter done; config flow pending |
+| 2 | Users, plans, subscriptions, orders | **Done** |
+| 3 | Panel manager, PasarGuard, config system | Adapter done; provisioning worker next |
 | 4 | Android app: login, home, services, store | Not started |
 | 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
 | 6 | Payment, renewal, expiration, notifications | Not started |
