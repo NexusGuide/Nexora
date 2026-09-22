@@ -37,6 +37,29 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Security — dependency advisories
+
+CI's dependency audit was failing, and it was right to. Three packages had
+published advisories at their pinned versions; two of them sit directly on
+the security path this project is built around.
+
+- **`pyjwt` 2.10.1 → 2.14.0** (7 advisories). This library verifies every
+  access and refresh token the API issues.
+- **`cryptography` 46.0.1 → 50.0.1** (7 advisories). This backs the Fernet
+  cipher that encrypts panel credentials at rest.
+- **`fastapi` 0.118.0 → 0.141.1** (6 advisories, in `starlette`). Starlette is
+  transitive; 0.118 resolves to starlette 0.48, and 0.141 to 1.6. It is
+  deliberately still not pinned directly, so it cannot drift out of the range
+  FastAPI supports.
+
+Verified rather than assumed: the upgraded set resolves cleanly, `pip-audit`
+reports no known vulnerabilities, and all 161 backend tests pass on it.
+
+Worth noting for later: this is what the weekly scheduled run of the security
+workflow is for. These advisories were published after the pins were chosen,
+so nothing was wrong when they were written — pins age into vulnerabilities on
+their own, which is why the audit runs on a schedule and not only on push.
+
 ### Fixed — the first Android build
 
 The first CI build failed in `:app:processDebugResources`, before a line of

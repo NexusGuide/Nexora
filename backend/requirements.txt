@@ -1,5 +1,9 @@
 # Nexus VPN backend — runtime dependencies
-fastapi==0.118.0
+# FastAPI is pinned at or above 0.141 because earlier releases resolve to
+# starlette 0.48, which has six published advisories. starlette is a
+# transitive dependency and is deliberately not pinned here — pinning it
+# directly would let it drift out of the range FastAPI supports.
+fastapi==0.141.1
 uvicorn[standard]==0.37.0
 pydantic==2.11.9
 pydantic-settings==2.10.1
@@ -12,10 +16,14 @@ asyncpg==0.30.0
 redis==6.4.0
 httpx==0.28.1
 
-# Security
-pyjwt==2.10.1
+# Security.
+# These two carry published advisories at older pins, so treat a bump here
+# as a security fix rather than routine maintenance: pyjwt verifies every
+# access and refresh token, and cryptography backs the Fernet cipher that
+# protects panel credentials at rest.
+pyjwt==2.14.0
 argon2-cffi==25.1.0
-cryptography==46.0.1
+cryptography==50.0.1
 
 # Observability (optional at runtime; enabled via SENTRY_DSN / METRICS_ENABLED)
 sentry-sdk[fastapi]==2.39.0
