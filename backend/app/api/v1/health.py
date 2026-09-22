@@ -51,3 +51,33 @@ async def health_redis(response: Response) -> dict[str, str]:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unavailable", "component": "redis"}
     return {"status": "ok", "component": "redis"}
+
+
+@router.get("/health/panels", summary="Panel readiness")
+async def health_panels(session: SessionDep, response: Response) -> dict[str, object]:
+    """Report each panel's last known state.
+
+    Reports what was last recorded rather than testing live: a health endpoint
+    that made an outbound call per panel would be a way to make the API slow,
+    or to use it as an amplifier. The scheduler refreshes these.
+    """
+    from sqlalchemy import select as _select
+
+    from app.models.enums import PanelStatus
+    from app.models.panel import Panel
+
+    panels = list(await session.scalars(_select(Panel)))
+    healthy = [p for p in panels if p.status is PanelStatus.ACTIVE]
+
+    if panels and not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": "ok" if (healthy or not panels) else "unavailable",
+        "component": "panels",
+        "total": len(panels),
+        "healthy": len(healthy),
+        # Names only. A base URL here would map the operator's infrastructure
+        # for anyone who can reach the endpoint.
+        "unhealthy": [p.name for p in panels if p.status is not PanelStatus.ACTIVE],
+    }

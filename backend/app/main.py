@@ -18,7 +18,10 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.api.queue import close_queue
+from app.api.v1 import admin as admin_routes
 from app.api.v1 import auth as auth_routes
+from app.api.v1 import configs as config_routes
 from app.api.v1 import health as health_routes
 from app.api.v1 import store as store_routes
 from app.api.v1 import users as user_routes
@@ -61,6 +64,7 @@ async def lifespan(_app: FastAPI):
         extra={"extra_fields": {"env": settings.app_env, "debug": settings.app_debug}},
     )
     yield
+    await close_queue()
     logger.info("application_stop")
 
 
@@ -162,6 +166,8 @@ app.include_router(health_routes.router)
 app.include_router(auth_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(user_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(store_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(config_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_routes.router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", include_in_schema=False)

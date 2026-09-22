@@ -258,6 +258,19 @@ class SubscriptionService:
         result = await self.session.scalars(stmt.order_by(Subscription.created_at.desc()))
         return list(result)
 
+    async def list_active_provisioned(self, *, limit: int = 500) -> list[Subscription]:
+        """Active subscriptions that have a panel account to query."""
+        result = await self.session.scalars(
+            select(Subscription)
+            .where(
+                Subscription.status == SubscriptionStatus.ACTIVE,
+                Subscription.panel_id.is_not(None),
+                Subscription.panel_username.is_not(None),
+            )
+            .limit(limit)
+        )
+        return list(result)
+
     async def get_for_user(self, subscription_id: str, user_id: str) -> Subscription:
         subscription = await self.session.get(Subscription, subscription_id)
         if subscription is None or subscription.user_id != user_id:

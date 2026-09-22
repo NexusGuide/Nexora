@@ -10,9 +10,16 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
-from app.models.enums import OrderStatus, PlanStatus, SubscriptionStatus
+from app.models.enums import (
+    OrderStatus,
+    PanelStatus,
+    PanelType,
+    PlanStatus,
+    ServerStatus,
+    SubscriptionStatus,
+)
 
 BYTES_PER_GB = 1024**3
 
@@ -134,3 +141,97 @@ class UserUpdate(BaseModel):
 
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=32)
+
+
+class ConfigPublic(BaseModel):
+    """A config as returned to its owner.
+
+    ``config_data`` is the actual connection URI. It is included because the
+    VPN client needs it, and it is returned only on the owner's own request —
+    never in a list belonging to somebody else, and never in a log.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    subscription_id: str
+    name: str
+    protocol: str | None = None
+    host: str | None = None
+    port: int | None = None
+    config_data: str
+    latency_ms: int | None = None
+    is_active: bool
+    updated_at: datetime
+
+
+class PanelCreate(BaseModel):
+    """Admin input for registering a panel.
+
+    The credentials arrive here over HTTPS and are encrypted before they are
+    stored. No response model echoes them back.
+    """
+
+    name: str = Field(..., min_length=1, max_length=128)
+    panel_type: PanelType
+    base_url: str = Field(..., min_length=8, max_length=512)
+    username: str | None = Field(default=None, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    api_key: str | None = Field(default=None, max_length=512)
+    verify_tls: bool = True
+
+    @field_validator("base_url")
+    @classmethod
+    def _require_http(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("base_url must start with http:// or https://")
+        return v.rstrip("/")
+
+
+class PanelPublic(BaseModel):
+    """A panel as returned by the API.
+
+    There is deliberately no field that could carry a credential: the schema
+    exposes ``has_credentials`` instead, so a future endpoint cannot leak one
+    by forgetting to exclude it.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    panel_type: PanelType
+    base_url: str
+    status: PanelStatus
+    verify_tls: bool
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime
+
+    # Read from Panel.has_credentials on the ORM object: whether a credential
+    # is set, never the credential itself.
+    has_credentials: bool
+
+
+class ServerCreate(BaseModel):
+    panel_id: str = Field(..., max_length=36)
+    name: str = Field(..., min_length=1, max_length=128)
+    host: str = Field(..., min_length=1, max_length=255)
+    port: int = Field(..., ge=1, le=65535)
+    region: str | None = Field(default=None, max_length=64)
+    group_id: str | None = Field(default=None, max_length=36)
+
+
+class ServerPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    panel_id: str
+    name: str
+    host: str
+    port: int
+    region: str | None = None
+    status: ServerStatus
+    load_percent: int
+    is_healthy: bool
+    last_health_check_at: datetime | None = None

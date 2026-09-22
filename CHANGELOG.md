@@ -9,6 +9,43 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — phase 3: provisioning worker and config system
+
+- **Job queue** on Redis Streams with a consumer group: at-least-once
+  delivery, retry with widening backoff (5s → 10m), a dead-letter stream after
+  5 attempts, and `xautoclaim` recovery of jobs a crashed worker left pending.
+  `InMemoryQueue` implements the same protocol for tests and single-process
+  development.
+- **Distributed locks** so two workers cannot act on one subscription at once.
+  Advisory only — correctness still rests on the idempotent handlers.
+- **ProvisioningService**: paid order → pick a healthy server → create the
+  panel account → fetch configs → ACTIVE. The panel account is created *before*
+  the subscription is activated, so a panel failure leaves a PENDING
+  subscription and a retry, never an active subscription with nothing behind
+  it. A retry reuses the same panel username rather than orphaning accounts.
+- **Config system**: a defensive URI parser (vless/vmess/trojan and others)
+  that degrades rather than raising on malformed panel output, plus storage
+  that replaces configs wholesale on refresh while preserving which one the
+  user had chosen.
+- **Worker and scheduler** are now real processes, not placeholders, and run by
+  default in `docker-compose.yml`. Scheduled: expiry sweep (5m), usage sync
+  (15m), panel health (10m).
+- **Endpoints**: `GET /configs`, `/configs/{id}`, `POST /configs/{id}/activate`,
+  `DELETE /configs/{id}`; `POST /subscriptions/{id}/refresh` now returns 202 and
+  queues the panel round-trip instead of returning 501; `GET /health/panels`.
+- **Admin endpoints** (RBAC-guarded, audit-logged) for registering panels and
+  servers, testing a panel's credentials, and confirming a manual payment —
+  enough to run the phase-3 flow before the admin panel exists in phase 7.
+- 35 further tests, including the PasarGuard adapter against a mocked HTTP
+  panel and provisioning under panel failure.
+
+### Notes
+- Payment gateways remain phase 6. `POST /admin/orders/{id}/confirm-payment`
+  covers card-to-card and other offline payment in the meantime.
+- Expiry disables the panel account *before* marking the subscription expired;
+  if the panel is unreachable the subscription stays ACTIVE for the next sweep
+  rather than being marked dead while its panel account still works.
+
 ### Added — phase 2: plans, orders and subscriptions
 
 - `Plan`, `PlanServer`, `Order`, `Payment`, `Subscription` and `Config` tables,

@@ -8,7 +8,8 @@ from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.core.exceptions import NotFoundError, NotImplementedYetError
+from app.api.queue import enqueue
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.billing import Plan
 from app.models.enums import PlanStatus, SubscriptionStatus
 from app.schemas.billing import (
@@ -20,6 +21,7 @@ from app.schemas.billing import (
 from app.schemas.common import SuccessResponse
 from app.services.order_service import OrderService
 from app.services.subscription_service import SubscriptionService
+from app.workers.jobs import REFRESH_CONFIGS
 
 router = APIRouter(tags=["store"])
 
@@ -204,21 +206,28 @@ async def renew_subscription(
 
 @router.post(
     "/subscriptions/{subscription_id}/refresh",
-    summary="Re-fetch configs from the panel (not implemented)",
+    summary="Queue a config refresh from the panel",
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def refresh_subscription(
-    subscription_id: str, session: SessionDep, user: CurrentUser
-) -> None:
-    # The interface is correct and reachable; the panel round-trip lands with
-    # the config system in phase 3 (spec rule 67 — no pretend success).
-    await SubscriptionService(session).get_for_user(subscription_id, user.id)
-    raise NotImplementedYetError(
-        "Config refresh needs the panel provisioning worker, planned for phase 3."
-    )
+    subscription_id: str,
+    request: Request,
+    session: SessionDep,
+    user: CurrentUser,
+):
+    """Ask the worker to re-fetch this subscription's configs.
 
-
-@router.get("/configs", summary="List your configs (not implemented)")
-async def list_configs(user: CurrentUser) -> None:
-    raise NotImplementedYetError(
-        "Configs are delivered by the panel provisioning worker, planned for phase 3."
+    Answers 202 rather than doing the panel round-trip inline: a slow or down
+    panel would otherwise hold the request open and time out the app.
+    """
+    subscription = await SubscriptionService(session).get_for_user(
+        subscription_id, user.id
     )
+    if not subscription.panel_username:
+        raise ConflictError(
+            "This subscription is still being set up",
+            code="SUBSCRIPTION_NOT_PROVISIONED",
+        )
+
+    job_id = await enqueue(REFRESH_CONFIGS, {"subscription_id": subscription_id})
+    return _envelope({"queued": job_id is not None, "job_id": job_id}, request)

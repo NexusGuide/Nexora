@@ -94,14 +94,12 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment: *backend-env
-    # Phase 2 delivers the job definitions; the service is declared here so the
-    # topology is complete, and starts as a no-op until then.
+    # Consumes the job stream: provisioning, config refresh, usage sync.
     command: ["python", "-m", "app.workers.worker"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     networks: [internal]
-    profiles: ["full"]
 
   scheduler:
     build:
@@ -114,7 +112,6 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     networks: [internal]
-    profiles: ["full"]
 
   nginx:
     image: nginx:1.27-alpine

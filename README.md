@@ -4,12 +4,12 @@ A professional Xray VPN client and service platform: an Android app, a backend
 API, and a web admin panel. Users register, buy a plan, pay, and receive a
 working config automatically — no Telegram required.
 
-> **Status: phase 2 of 8.** Repository, Docker topology, database schema,
-> authentication, the panel abstraction with a PasarGuard adapter, and now
-> plans, orders and subscriptions are implemented and tested. Payments, panel
-> provisioning, the Android app and the admin panel are not built yet. Nothing
-> here pretends to work: an unfinished integration returns
-> `501 NOT_IMPLEMENTED` rather than a fake success. See [Roadmap](#roadmap).
+> **Status: phase 3 of 8.** The backend is now functionally complete for the
+> purchase-to-connect path: a paid order is provisioned on a real Xray panel by
+> a background worker, and the customer receives working configs. Payment
+> gateways, the Android app and the admin panel are not built yet. Nothing here
+> pretends to work: an unfinished integration returns `501 NOT_IMPLEMENTED`
+> rather than a fake success. See [Roadmap](#roadmap).
 
 ```
 PUBLIC REPOSITORY != PUBLIC SECRETS
@@ -60,6 +60,9 @@ a new adapter rather than an edit to the subscription flow.
 - **Idempotent ordering** — a unique constraint, a row lock and a plan snapshot,
   so a retried request or a replayed payment callback never charges twice or
   provisions twice.
+- **Background provisioning** — a Redis Streams queue with at-least-once
+  delivery, retry with backoff and a dead-letter stream. A panel outage delays
+  a subscription; it never corrupts one.
 
 ## Requirements
 
@@ -171,8 +174,10 @@ Implemented:
 | User | `GET`/`PATCH /me`, `GET /me/devices`, `DELETE /me/devices/{id}` |
 | Store | `GET /plans`, `/plans/{id}` |
 | Orders | `POST /orders`, `GET /orders`, `/orders/{id}`, `POST /orders/{id}/cancel` |
-| Subscriptions | `GET /subscriptions`, `/subscriptions/{id}`, `POST /subscriptions/{id}/renew` |
-| Health | `GET /health`, `/health/database`, `/health/redis` |
+| Subscriptions | `GET /subscriptions`, `/subscriptions/{id}`, `POST /subscriptions/{id}/renew`, `/subscriptions/{id}/refresh` |
+| Configs | `GET /configs`, `/configs/{id}`, `POST /configs/{id}/activate`, `DELETE /configs/{id}` |
+| Admin | `POST /admin/panels`, `/admin/panels/{id}/test`, `/admin/servers`, `/admin/orders/{id}/confirm-payment` |
+| Health | `GET /health`, `/health/database`, `/health/redis`, `/health/panels` |
 
 `POST /orders` is idempotent: send an `idempotency_key` and a retried request
 returns the original order with 200 rather than creating a second one.
@@ -192,7 +197,7 @@ database server.
 |---|---|---|
 | 1 | Repository, Docker, Postgres, Redis, FastAPI, auth | **Done** |
 | 2 | Users, plans, subscriptions, orders | **Done** |
-| 3 | Panel manager, PasarGuard, config system | Adapter done; provisioning worker next |
+| 3 | Panel manager, PasarGuard, config system | **Done** |
 | 4 | Android app: login, home, services, store | Not started |
 | 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
 | 6 | Payment, renewal, expiration, notifications | Not started |
@@ -205,6 +210,7 @@ database server.
 - [security.md](docs/security.md)
 - [deployment.md](docs/deployment.md)
 - [panel-adapters.md](docs/panel-adapters.md)
+- [workers.md](docs/workers.md)
 - [contributing.md](docs/contributing.md)
 
 ## License
