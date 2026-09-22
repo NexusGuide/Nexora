@@ -85,6 +85,24 @@ class Settings(BaseSettings):
     payment_api_key: str = ""
     payment_callback_url: str = ""
 
+    # --- Email ------------------------------------------------------------
+    # With no SMTP_HOST the app uses a console transport that logs the message
+    # instead of sending it, so password reset works in development without a
+    # mail server — and is obviously not delivering anything.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
+
+    # Where the reset link points. The API host is not necessarily where the
+    # user lands, so this is separate from PUBLIC_API_URL.
+    password_reset_url: str = ""
+    reset_token_ttl_minutes: int = 60
+    verify_token_ttl_hours: int = 24
+
     # --- Optional integrations --------------------------------------------
     pasarguard_url: str = ""
     pasarguard_username: str = ""

@@ -26,7 +26,13 @@ from app.models.enums import (
     UserStatus,
 )
 from app.models.panel import AuditLog, Panel, Server, ServerGroup
-from app.models.user import LoginAttempt, RefreshToken, User, UserDevice
+from app.models.user import (
+    LoginAttempt,
+    RefreshToken,
+    User,
+    UserDevice,
+    VerificationToken,
+)
 
 __all__ = [
     "UNLIMITED_TRAFFIC",
@@ -54,4 +60,5 @@ __all__ = [
     "User",
     "UserDevice",
     "UserStatus",
+    "VerificationToken",
 ]

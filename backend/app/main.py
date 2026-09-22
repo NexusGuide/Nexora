@@ -14,11 +14,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.api.middleware import (
+    RateLimitMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.api.queue import close_queue
+from app.api.rate_limit import close_limiter
 from app.api.v1 import admin as admin_routes
 from app.api.v1 import auth as auth_routes
 from app.api.v1 import configs as config_routes
@@ -27,6 +32,7 @@ from app.api.v1 import store as store_routes
 from app.api.v1 import users as user_routes
 from app.core.exceptions import AppError
 from app.core.logging import configure_logging
+from app.core.monitoring import init_metrics, init_sentry, metrics_enabled
 
 try:
     from app.core.config import get_settings
@@ -56,6 +62,9 @@ except Exception as exc:
 configure_logging(settings.log_level, json_output=not settings.app_debug)
 logger = logging.getLogger(__name__)
 
+init_sentry(settings)
+init_metrics(settings)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -65,6 +74,7 @@ async def lifespan(_app: FastAPI):
     )
     yield
     await close_queue()
+    await close_limiter()
     logger.info("application_stop")
 
 
@@ -80,6 +90,7 @@ app = FastAPI(
 )
 
 app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -168,6 +179,38 @@ app.include_router(user_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(store_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(config_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_routes.router, prefix=settings.api_v1_prefix)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics(request: Request) -> Response:
+    """Prometheus scrape endpoint.
+
+    Restricted to private networks: metrics expose request volumes, error
+    rates and endpoint names, which map the deployment for anyone who can read
+    them. Scrape it from inside the network or through the reverse proxy with
+    its own auth.
+    """
+    if not metrics_enabled():
+        return Response(status_code=404)
+
+    host = request.client.host if request.client else ""
+    if not _is_private(host):
+        logger.warning("metrics_access_denied", extra={"extra_fields": {"client": host}})
+        return Response(status_code=403)
+
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def _is_private(host: str) -> bool:
+    import ipaddress
+
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_private or address.is_loopback
 
 
 @app.get("/", include_in_schema=False)

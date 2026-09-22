@@ -8,9 +8,10 @@ import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.core.logging import request_id_ctx, user_id_ctx
+from app.core.monitoring import record_request
 
 logger = logging.getLogger("app.access")
 
@@ -38,6 +39,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            duration = time.perf_counter() - started
+            # The route template, never the resolved path: one label value per
+            # order id would blow up Prometheus cardinality.
+            route = request.scope.get("route")
+            endpoint = getattr(route, "path", None) or "unmatched"
+            record_request(request.method, endpoint, status_code, duration)
+
             logger.info(
                 "request",
                 extra={
@@ -45,13 +53,45 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                         "endpoint": request.url.path,
                         "method": request.method,
                         "status_code": status_code,
-                        "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                        "latency_ms": round(duration * 1000, 2),
                         "client_ip": request.client.host if request.client else None,
                     }
                 },
             )
             request_id_ctx.reset(token)
             user_id_ctx.reset(user_token)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Applies the rate limit before the route runs.
+
+    Placed after RequestContextMiddleware so a rejection still carries a
+    request_id and appears in the access log.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        from app.api.rate_limit import enforce
+        from app.core.exceptions import RateLimitedError
+
+        try:
+            await enforce(request)
+        except RateLimitedError as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    "success": False,
+                    "error": {
+                        "code": exc.code,
+                        "message": exc.message,
+                        **({"details": exc.details} if exc.details else {}),
+                    },
+                    "request_id": getattr(request.state, "request_id", None),
+                },
+                headers={"Retry-After": str(exc.details.get("window_seconds", 60))},
+            )
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

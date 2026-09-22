@@ -9,6 +9,31 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — phase 3.5: the gaps before shipping an app
+
+- **Device limits are enforced.** A plan's device count was stored and sent to
+  the panel but never checked, so a one-device plan allowed unlimited devices.
+  Login now registers against the highest allowance among a user's active
+  subscriptions (the highest, not the sum — stacking cheap plans must not beat
+  an expensive cap), and a refusal returns the device list so the app can offer
+  a revoke instead of a dead end. A device already registered is never blocked.
+- **Password reset and email verification**, replacing three `501`s. Tokens are
+  stored hashed, single-use and short-lived; using one revokes every session,
+  because a reset is what someone does when they believe they are compromised.
+  `forgot-password` answers identically whether or not the account exists.
+- **Rate limiting** with a Redis sliding window, keyed on the user when
+  authenticated and the IP otherwise, tighter on `/auth/`. It fails open: a
+  limiter that takes the API down when its cache dies is a worse outage than
+  the abuse it prevents.
+- **Sentry and Prometheus** wired, having previously been settings that nothing
+  read. Sentry events pass through the same redaction as logs, with PII and
+  request bodies off. `/metrics` is restricted to private addresses and
+  disabled unless `METRICS_ENABLED`.
+- **`scripts/backup-db.sh`**: daily/weekly/monthly tiers, optional GPG
+  encryption, a size floor, and `--verify` that restores the dump into a
+  throwaway database and counts the tables — an unverified backup is a
+  hypothesis.
+
 ### Added — phase 3: provisioning worker and config system
 
 - **Job queue** on Redis Streams with a consumer group: at-least-once

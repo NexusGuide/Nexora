@@ -14,6 +14,7 @@ from app.models.user import RefreshToken, User, UserDevice
 from app.schemas.auth import UserPublic
 from app.schemas.billing import DevicePublic, UserUpdate
 from app.schemas.common import SuccessResponse
+from app.services.device_service import DeviceService
 
 router = APIRouter(tags=["users"])
 
@@ -94,14 +95,11 @@ async def list_devices(request: Request, session: SessionDep, user: CurrentUser)
 async def revoke_device(
     device_id: str, request: Request, session: SessionDep, user: CurrentUser
 ):
-    device = await session.get(UserDevice, device_id)
-    if device is None or device.user_id != user.id:
-        raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
-
     # Revoked rather than deleted: the row is evidence of where an account has
     # been used, which matters when a user reports a compromise.
-    device.status = DeviceStatus.REVOKED
-    device.last_seen_at = datetime.now(UTC)
+    device = await DeviceService(session).revoke(user.id, device_id)
+    if device is None:
+        raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
 
     # Kill the sessions bound to that device in the same step, or "revoke"
     # would leave a working refresh token behind.

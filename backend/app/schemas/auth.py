@@ -118,3 +118,23 @@ class UserPublic(BaseModel):
 class AuthResult(BaseModel):
     user: UserPublic
     tokens: TokenPair
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Accepts a username, email or phone — whatever the user remembers."""
+
+    identifier: str = Field(..., min_length=3, max_length=255)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=16, max_length=256)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_password(cls, v: str) -> str:
+        return _validate_password(v)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., min_length=16, max_length=256)

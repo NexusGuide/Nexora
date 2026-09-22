@@ -63,6 +63,8 @@ a new adapter rather than an edit to the subscription flow.
 - **Background provisioning** — a Redis Streams queue with at-least-once
   delivery, retry with backoff and a dead-letter stream. A panel outage delays
   a subscription; it never corrupts one.
+- **Enforced device limits, password reset, rate limiting** and wired-up
+  Sentry/Prometheus, plus a verifying backup script.
 
 ## Requirements
 
@@ -170,7 +172,7 @@ Implemented:
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` |
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/verify`, `GET /auth/me` |
 | User | `GET`/`PATCH /me`, `GET /me/devices`, `DELETE /me/devices/{id}` |
 | Store | `GET /plans`, `/plans/{id}` |
 | Orders | `POST /orders`, `GET /orders`, `/orders/{id}`, `POST /orders/{id}/cancel` |

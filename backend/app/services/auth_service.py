@@ -31,8 +31,8 @@ from app.core.security import (
     needs_rehash,
     verify_password,
 )
-from app.models.enums import DeviceStatus, UserStatus
-from app.models.user import LoginAttempt, RefreshToken, User, UserDevice
+from app.models.enums import UserStatus
+from app.models.user import LoginAttempt, RefreshToken, User
 from app.schemas.auth import (
     AuthResult,
     LoginRequest,
@@ -40,6 +40,7 @@ from app.schemas.auth import (
     TokenPair,
     UserPublic,
 )
+from app.services.device_service import DeviceService
 
 logger = logging.getLogger(__name__)
 
@@ -323,26 +324,15 @@ class AuthService:
         await self.session.flush()
 
     async def _touch_device(self, user: User, payload: LoginRequest) -> None:
-        device = await self.session.scalar(
-            select(UserDevice).where(
-                UserDevice.user_id == user.id,
-                UserDevice.device_id == payload.device_id,
-            )
+        """Register the device, enforcing the plan's allowance.
+
+        Raises DeviceLimitReachedError, which the login path lets through: the
+        credentials were correct, so the user must be told what is wrong rather
+        than shown a generic failure.
+        """
+        await DeviceService(self.session).register(
+            user.id,
+            device_id=payload.device_id or "",
+            device_name=payload.device_name,
+            app_version=payload.app_version,
         )
-        now = datetime.now(UTC)
-        if device is None:
-            self.session.add(
-                UserDevice(
-                    user_id=user.id,
-                    device_id=payload.device_id or "",
-                    device_name=payload.device_name or "Unknown device",
-                    app_version=payload.app_version,
-                    last_seen_at=now,
-                    status=DeviceStatus.ACTIVE,
-                )
-            )
-        else:
-            device.last_seen_at = now
-            device.status = DeviceStatus.ACTIVE
-            if payload.app_version:
-                device.app_version = payload.app_version
