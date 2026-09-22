@@ -64,7 +64,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title=f"{settings.app_name} API",
-    version="0.1.0",
+    version="0.0.1",
     lifespan=lifespan,
     # API docs are useful in development and an unnecessary disclosure in
     # production, where the schema is published deliberately instead.
