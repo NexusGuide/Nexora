@@ -46,7 +46,7 @@ jobs:
         # job and are not secrets.
         env:
           APP_ENV: development
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         run: |
           export JWT_SECRET="$(openssl rand -hex 32)"
           export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"

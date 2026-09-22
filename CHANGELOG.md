@@ -9,6 +9,34 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — building the Android app in CI
+
+- **The Gradle wrapper was missing.** `android/` carried
+  `gradle-wrapper.properties` but neither `gradle-wrapper.jar` nor the
+  `gradlew`/`gradlew.bat` scripts, so `./gradlew` could not work in any
+  environment — not locally, not in CI. All three are now committed, from
+  Gradle's own `v8.11.1` tag.
+- **`.github/workflows/android.yml`** builds the app on GitHub's runners,
+  which already have the Android SDK. It runs the unit tests and lint,
+  assembles a debug APK, uploads it as a run artifact, and attaches it to the
+  release on a `v*` tag. Getting an installable APK now needs nothing
+  installed locally.
+  - `gradle/actions/wrapper-validation` checks the committed wrapper jar
+    against the official Gradle checksums. A tampered wrapper jar executes
+    arbitrary code with the repository checked out, so this is not optional.
+  - The backend URL comes from a repository **variable**, not a secret,
+    because a URL is configuration. No secret is involved anywhere in the
+    workflow.
+  - The APK is a *debug* build. The release keystore is absent from this
+    repository by design, so CI cannot sign a production build and does not
+    pretend to (spec rule 67).
+- **A second job scans the built APK** for secret-shaped values, reading
+  extracted strings rather than grepping text files — a text-only grep over a
+  DEX passes unconditionally and proves nothing. On a hit it names the file
+  and not the match, because CI logs are public.
+- `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
+  `:` is ambiguous YAML and strict parsers reject the file outright.
+
 ### Added — phase 4: the Android client
 
 - Kotlin + Jetpack Compose app under `android/`: sign-in, home, store,
@@ -35,11 +63,11 @@ change it without a deprecation period.
   logging is debug-gated and ProGuard strips `android.util.Log`.
 
 ### Notes
-- **The build is unverified.** This environment has no Android SDK, so the app
-  has not been compiled or run. Static checks pass (imports resolve, every
-  referenced string exists in both locales with matching format arguments,
-  ViewModels are annotated), but expect to fix compile errors on the first
-  real build.
+- **The build is unverified until the first CI run finishes.** The app has
+  never been compiled. Static checks pass — imports resolve, every referenced
+  string exists in both locales with matching format arguments, ViewModels are
+  annotated, and every `libs.*` reference resolves in the version catalog —
+  but expect compile errors on the first real build.
 - Connecting is phase 5: the Connect button is present and disabled with an
   explanation, not a fake success.
 

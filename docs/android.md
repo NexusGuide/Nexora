@@ -107,6 +107,72 @@ Traffic figures use binary units (1 GB = 1024 MB) to match how panels and plans
 express quotas — showing "107.4 GB" for a 100 GB plan looks like a bug to the
 customer.
 
+## Building
+
+### Without a local toolchain — GitHub Actions
+
+This is the shortest path to an installable APK, and it needs nothing on your
+own machine: no Android SDK, no Gradle, no JDK.
+
+1. Push to `main` (or run **Actions → Android → Run workflow**).
+2. Open the run, wait for **Build and test**, and download the
+   `nexora-debug-<branch>-<sha>.apk` artifact at the bottom of the page.
+3. Push a `v*` tag and the same APK is attached to the GitHub release.
+
+The APK is a **debug** build, signed with the standard Android debug key. It
+installs on a phone and it is not a production artifact — the release keystore
+is deliberately absent from this repository, so CI cannot produce a signed
+release build and does not pretend to.
+
+The backend URL is configuration, not a secret, so CI reads it from a
+repository **variable** rather than a secret:
+
+> Settings → Secrets and variables → Actions → **Variables** → New variable
+> `API_BASE_URL` = `https://api.your-domain.com/` (trailing slash required)
+
+Without it the build falls back to `http://10.0.2.2:8000/`, the emulator's
+address for the host machine — correct for a developer, useless on a phone.
+
+A second job unpacks the APK and scans its extracted strings for
+secret-shaped values. It reads binaries with `strings`, not `grep` over text
+files, because a text-only scan of a DEX would pass unconditionally and prove
+nothing. On a hit it names the file and **not** the match: CI logs are public.
+
+### Locally
+
+```bash
+cd android
+./gradlew :app:assembleDebug      # → app/build/outputs/apk/debug/app-debug.apk
+```
+
+The Gradle wrapper is committed, so `./gradlew` downloads Gradle 8.11.1 itself
+and no separate Gradle installation is needed. You still need a JDK 17 and the
+Android SDK (API 35 platform, build-tools 35.0.0) — installing Android Studio
+provides both.
+
+Point the build at your backend by creating `android/local.properties`, which
+is git-ignored:
+
+```properties
+api.base.url.debug=http://10.0.2.2:8000/
+api.base.url=https://api.your-domain.com/
+```
+
+On Windows use `gradlew.bat` rather than `./gradlew`, and run it from the
+`android` directory — not from `C:\Windows\System32`.
+
+If the SDK manager cannot reach Google, the JVM is the usual reason: it does
+not honour the Windows system proxy. Either pass the proxy explicitly:
+
+```powershell
+.\sdkmanager.bat --sdk_root="D:\Android\Sdk" `
+  --proxy=http --proxy_host=127.0.0.1 --proxy_port=10808 `
+  "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+```
+
+(substituting your local proxy's port), or skip the problem and use the CI
+build above.
+
 ## Testing
 
 ```bash

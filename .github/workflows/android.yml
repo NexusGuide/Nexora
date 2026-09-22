@@ -1,0 +1,181 @@
+name: Android
+
+# Builds the Nexora app on GitHub's runners, which already have the Android
+# SDK installed. This is the supported way to get an installable APK without
+# a local toolchain: push, wait, download the artifact.
+#
+# No secrets are involved. The release keystore is deliberately absent, so
+# this workflow produces a *debug* APK — signed with the standard debug key,
+# installable on a phone, and clearly not a production build. A release APK
+# needs a keystore that must never enter this repository; see docs/android.md.
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: android
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Needed only by the last step, which attaches the APK to a tagged
+    # release. Scoped to this job rather than the whole workflow.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Fails if gradle-wrapper.jar is not byte-identical to an official
+      # Gradle release. A tampered wrapper jar would run arbitrary code with
+      # the repository checked out, so this check is not optional.
+      - name: Validate the Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # The backend URL is configuration, not a secret, so it comes from a
+      # repository *variable*. Set API_BASE_URL under
+      # Settings -> Secrets and variables -> Actions -> Variables.
+      # Without it the build falls back to the emulator loopback address,
+      # which is correct for a developer but useless on a real phone.
+      - name: Write local.properties
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          API_BASE_URL_DEBUG: ${{ vars.API_BASE_URL_DEBUG }}
+        run: |
+          {
+            [ -n "$API_BASE_URL" ] && echo "api.base.url=$API_BASE_URL"
+            [ -n "$API_BASE_URL_DEBUG" ] && echo "api.base.url.debug=$API_BASE_URL_DEBUG"
+          } > local.properties || true
+          echo "local.properties:"
+          cat local.properties
+
+      # git on Windows does not preserve the executable bit, so a wrapper
+      # committed from a Windows clone arrives here mode 644. Cheaper to make
+      # the workflow not care than to depend on how it was committed.
+      - name: Make the wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+        continue-on-error: true
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Name the APK after the commit
+        id: apk
+        run: |
+          src=app/build/outputs/apk/debug/app-debug.apk
+          name="nexora-debug-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}.apk"
+          cp "$src" "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "path=android/$name" >> "$GITHUB_OUTPUT"
+          ls -lh "$name"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports-${{ github.run_number }}
+          path: |
+            android/app/build/reports/
+            android/app/build/outputs/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Attach the APK to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Debug APK built by CI. Not a signed release build."
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.apk.outputs.name }}" --clobber
+
+  # A second, separate guarantee: the APK must not contain a backend secret.
+  # The app is supposed to hold nothing but a URL.
+  scan-apk:
+    name: APK carries no secrets
+    runs-on: ubuntu-latest
+    needs: build
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nexora-debug-*
+          merge-multiple: true
+          path: apk
+
+      - name: Inspect the APK for secret-shaped values
+        run: |
+          apk=$(find apk -name '*.apk' | head -n1)
+          test -n "$apk" || { echo "::error::No APK found to scan."; exit 1; }
+          echo "Scanning $apk"
+          unzip -o -q "$apk" -d apk-extracted
+
+          # classes.dex and resources.arsc are binary, so this reads extracted
+          # strings rather than grepping text files — a text-only grep here
+          # would pass unconditionally and prove nothing.
+          found=0
+          while IFS= read -r -d '' f; do
+            if strings -a -n 8 "$f" | grep -qE \
+              'JWT_(REFRESH_)?SECRET|ENCRYPTION_KEY|ADMIN_BOOTSTRAP_SECRET|(postgres(ql)?|mysql)(\+[a-z]+)?://[^:[:space:]/]+:[^@[:space:]]{4,}@|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+            then
+              # Deliberately does not print what matched: these logs are
+              # public, and echoing a leaked secret would publish it.
+              echo "::error::Secret-shaped value found in the APK, in ${f#apk-extracted/}"
+              found=1
+            fi
+          done < <(find apk-extracted -type f -print0)
+
+          [ "$found" -eq 0 ] || exit 1
+          echo "No backend secrets found in the APK."

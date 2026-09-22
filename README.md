@@ -186,6 +186,17 @@ returns the original order with 200 rather than creating a second one.
 
 Full schema at `/docs` in development.
 
+## Getting the Android app
+
+You do not need an Android toolchain to get an installable APK. Push, then
+open **Actions → Android**, and download the `nexora-debug-*.apk` artifact from
+the finished run. A `v*` tag attaches the same APK to the GitHub release.
+
+It is a debug build, signed with the standard debug key. The release keystore
+is not in this repository and never will be, so CI cannot sign a production
+build — see [docs/android.md](docs/android.md) for building locally and for
+producing a signed release yourself.
+
 ## Deployment
 
 See [docs/deployment.md](docs/deployment.md). In short: put nginx or Caddy in
@@ -200,7 +211,7 @@ database server.
 | 1 | Repository, Docker, Postgres, Redis, FastAPI, auth | **Done** |
 | 2 | Users, plans, subscriptions, orders | **Done** |
 | 3 | Panel manager, PasarGuard, config system | **Done** |
-| 4 | Android app: login, home, services, store | **Done** (unbuilt — no SDK here) |
+| 4 | Android app: login, home, services, store | **Done** (first CI build pending) |
 | 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
 | 6 | Payment, renewal, expiration, notifications | Not started |
 | 7 | Admin panel, RBAC, logs, analytics | Not started |
