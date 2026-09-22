@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Nexus VPN pre-commit hook — last line of defence before a secret is committed.
+# Install with: ./scripts/install-hooks.sh
+# =============================================================================
+set -uo pipefail
+
+RED=$'\033[0;31m'; YEL=$'\033[0;33m'; GRN=$'\033[0;32m'; NC=$'\033[0m'
+ROOT="$(git rev-parse --show-toplevel)"
+FAILED=0
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[[ -z "$staged" ]] && exit 0
+
+# --- 1. Block files that must never be tracked -------------------------------
+while IFS= read -r f; do
+  case "$f" in
+    .env|.env.local|.env.production|.env.staging|*/.env|*.pem|*.key|*.p12|*.pfx|\
+    *.jks|*.keystore|*.db|*.sqlite|*.sqlite3|*.dump|google-services.json|\
+    *service-account*.json|*firebase-adminsdk*.json|keystore.properties)
+      echo "${RED}BLOCKED${NC} $f — this file type must never be committed."
+      FAILED=1
+      ;;
+  esac
+done <<< "$staged"
+
+# --- 2. gitleaks on staged changes (if available) ----------------------------
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --staged --redact \
+        --config "$ROOT/.gitleaks.toml" --no-banner 2>&1; then
+    echo "${RED}BLOCKED${NC} gitleaks found a secret in the staged changes."
+    FAILED=1
+  fi
+else
+  echo "${YEL}note${NC}  gitleaks not installed — running fallback pattern check only."
+fi
+
+# --- 3. Fallback pattern check ----------------------------------------------
+# Catches assignments with a real-looking literal, while allowing empty values,
+# <placeholders> and ${VAR} interpolation.
+PATTERNS='(JWT_SECRET|JWT_REFRESH_SECRET|ENCRYPTION_KEY|ADMIN_BOOTSTRAP_SECRET|PAYMENT_API_KEY|PASARGUARD_PASSWORD|POSTGRES_PASSWORD|SECRET_KEY|PRIVATE_KEY)\s*[:=]\s*["'\'']?[A-Za-z0-9+/=_-]{12,}'
+TELEGRAM='[0-9]{8,10}:[A-Za-z0-9_-]{35}'
+
+while IFS= read -r f; do
+  [[ -f "$ROOT/$f" ]] || continue
+  case "$f" in
+    .env.example|.gitleaks.toml|.githooks/*|scripts/generate-secrets.sh|docs/*|*.md) continue ;;
+  esac
+  hits=$(git show ":$f" 2>/dev/null \
+    | grep -nEI "$PATTERNS|$TELEGRAM" 2>/dev/null \
+    | grep -vE '<[a-zA-Z0-9 ._-]+>|\$\{?[A-Z_]|for-tests-only|changeme|placeholder|example' || true)
+  if [[ -n "$hits" ]]; then
+    echo "${RED}BLOCKED${NC} $f looks like it contains a hardcoded secret:"
+    sed 's/^/    /' <<< "$hits" | cut -c1-140
+    FAILED=1
+  fi
+done <<< "$staged"
+
+if [[ $FAILED -eq 1 ]]; then
+  cat <<EOF
+
+${RED}Commit rejected.${NC}  PUBLIC REPOSITORY != PUBLIC SECRETS
+
+  - Move the value into .env (git-ignored) and read it via settings.
+  - If it is a false positive, adjust the allowlist in .gitleaks.toml.
+  - To bypass deliberately (rare, and never for a real secret):
+        git commit --no-verify
+
+EOF
+  exit 1
+fi
+
+echo "${GRN}pre-commit: no secrets detected.${NC}"
+exit 0

@@ -1,0 +1,290 @@
+"""PasarGuard adapter (spec rule 16).
+
+PasarGuard exposes a Marzban-compatible REST API: an admin token endpoint plus
+CRUD under ``/api/user``. The endpoint paths and payload keys are collected in
+``ENDPOINTS`` and ``FIELDS`` below so they can be adjusted for a specific panel
+version without touching the logic.
+
+VERIFY BEFORE PRODUCTION USE: the paths below match the documented
+Marzban-compatible surface, but they have not been exercised against a live
+PasarGuard instance in this repository. Run the connection test from the admin
+panel (Panels -> Test) against your own installation first; if a call fails,
+correct the mapping here rather than in calling code.
+
+Credentials are supplied by the caller already decrypted and are never logged.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+
+from app.core.exceptions import PanelError
+from app.panels.base import PanelAdapter, PanelCredentials, PanelUsage, PanelUser
+
+logger = logging.getLogger(__name__)
+
+ENDPOINTS = {
+    "token": "/api/admin/token",
+    "user": "/api/user/{username}",
+    "users": "/api/users",
+    "user_create": "/api/user",
+    "user_reset": "/api/user/{username}/reset",
+}
+
+FIELDS = {
+    "used_traffic": "used_traffic",
+    "data_limit": "data_limit",
+    "expire": "expire",
+    "status": "status",
+    "subscription_url": "subscription_url",
+    "links": "links",
+}
+
+
+class PasarGuardAdapter(PanelAdapter):
+    panel_type = "PASARGUARD"
+
+    def __init__(self, credentials: PanelCredentials) -> None:
+        super().__init__(credentials)
+        self._client: httpx.AsyncClient | None = None
+        self._token: str | None = None
+
+    # ------------------------------------------------------------- transport
+    async def _http(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                base_url=self.credentials.base_url.rstrip("/"),
+                timeout=self.credentials.timeout_seconds,
+                verify=self.credentials.verify_tls,
+                follow_redirects=False,
+            )
+        return self._client
+
+    async def _authenticate(self) -> str:
+        """Obtain an admin token. Cached for the lifetime of the adapter."""
+        if self._token:
+            return self._token
+
+        if self.credentials.api_key:
+            self._token = self.credentials.api_key
+            return self._token
+
+        if not (self.credentials.username and self.credentials.password):
+            raise PanelError(
+                "Panel has no usable credentials configured",
+                code="PANEL_NO_CREDENTIALS",
+            )
+
+        client = await self._http()
+        try:
+            response = await client.post(
+                ENDPOINTS["token"],
+                data={
+                    "username": self.credentials.username,
+                    "password": self.credentials.password,
+                    "grant_type": "password",
+                },
+            )
+        except httpx.RequestError as exc:
+            # str(exc) carries the URL but never the body, so no credential leak.
+            raise PanelError("Panel is unreachable", code="PANEL_UNREACHABLE") from exc
+
+        if response.status_code == 401:
+            raise PanelError(
+                "Panel rejected the stored credentials",
+                code="PANEL_AUTH_FAILED",
+                status_code=502,
+            )
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel returned HTTP {response.status_code} on authentication",
+                code="PANEL_AUTH_FAILED",
+            )
+
+        token = response.json().get("access_token")
+        if not token:
+            raise PanelError(
+                "Panel response contained no access token",
+                code="PANEL_AUTH_FAILED",
+            )
+        self._token = token
+        return token
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        client = await self._http()
+        token = await self._authenticate()
+        headers = {"Authorization": f"Bearer {token}", **kwargs.pop("headers", {})}
+
+        response = await client.request(method, path, headers=headers, **kwargs)
+
+        # A cached token can expire; re-authenticate once before giving up.
+        if response.status_code == 401:
+            self._token = None
+            token = await self._authenticate()
+            headers["Authorization"] = f"Bearer {token}"
+            response = await client.request(method, path, headers=headers, **kwargs)
+        return response
+
+    # ------------------------------------------------------------- mapping
+    @staticmethod
+    def _to_panel_user(payload: dict[str, Any]) -> PanelUser:
+        expire_raw = payload.get(FIELDS["expire"])
+        expire_at: datetime | None = None
+        if isinstance(expire_raw, (int, float)) and expire_raw > 0:
+            expire_at = datetime.fromtimestamp(expire_raw, tz=UTC)
+        elif isinstance(expire_raw, str) and expire_raw:
+            try:
+                expire_at = datetime.fromisoformat(expire_raw.replace("Z", "+00:00"))
+            except ValueError:
+                expire_at = None
+
+        return PanelUser(
+            username=payload.get("username", ""),
+            status=str(payload.get(FIELDS["status"], "unknown")),
+            traffic_limit_bytes=int(payload.get(FIELDS["data_limit"]) or 0),
+            traffic_used_bytes=int(payload.get(FIELDS["used_traffic"]) or 0),
+            expire_at=expire_at,
+            subscription_url=payload.get(FIELDS["subscription_url"]),
+            configs=list(payload.get(FIELDS["links"]) or []),
+            raw=payload,
+        )
+
+    # -------------------------------------------------------------- contract
+    async def test_connection(self) -> bool:
+        await self._authenticate()
+        response = await self._request("GET", ENDPOINTS["users"], params={"limit": 1})
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel returned HTTP {response.status_code}",
+                code="PANEL_UNREACHABLE",
+            )
+        return True
+
+    async def create_user(
+        self,
+        username: str,
+        *,
+        traffic_limit_bytes: int,
+        expire_at: datetime | None,
+        device_limit: int | None = None,
+        inbound_tags: list[str] | None = None,
+    ) -> PanelUser:
+        existing = await self.get_user(username)
+        if existing is not None:
+            # Idempotent: a retried job must not create a duplicate account.
+            return existing
+
+        body: dict[str, Any] = {
+            "username": username,
+            FIELDS["data_limit"]: traffic_limit_bytes,
+            FIELDS["expire"]: int(expire_at.timestamp()) if expire_at else 0,
+            FIELDS["status"]: "active",
+            "proxies": {},
+            "inbounds": {},
+        }
+        if inbound_tags:
+            body["inbounds"] = {"vless": inbound_tags}
+
+        response = await self._request("POST", ENDPOINTS["user_create"], json=body)
+        if response.status_code == 409:
+            found = await self.get_user(username)
+            if found:
+                return found
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel refused to create the user (HTTP {response.status_code})",
+                code="PANEL_CREATE_FAILED",
+            )
+        return self._to_panel_user(response.json())
+
+    async def get_user(self, username: str) -> PanelUser | None:
+        response = await self._request("GET", ENDPOINTS["user"].format(username=username))
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel returned HTTP {response.status_code} for get_user",
+                code="PANEL_READ_FAILED",
+            )
+        return self._to_panel_user(response.json())
+
+    async def update_user(self, username: str, **changes: Any) -> PanelUser:
+        response = await self._request(
+            "PUT", ENDPOINTS["user"].format(username=username), json=changes
+        )
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel refused the update (HTTP {response.status_code})",
+                code="PANEL_UPDATE_FAILED",
+            )
+        return self._to_panel_user(response.json())
+
+    async def delete_user(self, username: str) -> bool:
+        response = await self._request(
+            "DELETE", ENDPOINTS["user"].format(username=username)
+        )
+        if response.status_code in (200, 204, 404):
+            return True
+        raise PanelError(
+            f"Panel refused the delete (HTTP {response.status_code})",
+            code="PANEL_DELETE_FAILED",
+        )
+
+    async def disable_user(self, username: str) -> bool:
+        await self.update_user(username, **{FIELDS["status"]: "disabled"})
+        return True
+
+    async def enable_user(self, username: str) -> bool:
+        await self.update_user(username, **{FIELDS["status"]: "active"})
+        return True
+
+    async def get_usage(self, username: str) -> PanelUsage:
+        user = await self.get_user(username)
+        if user is None:
+            raise PanelError("User does not exist on the panel", code="PANEL_NO_USER")
+        return PanelUsage(
+            username=username,
+            used_bytes=user.traffic_used_bytes,
+            limit_bytes=user.traffic_limit_bytes,
+            measured_at=datetime.now(UTC),
+        )
+
+    async def get_configs(self, username: str) -> list[str]:
+        user = await self.get_user(username)
+        return user.configs if user else []
+
+    async def renew_user(
+        self,
+        username: str,
+        *,
+        traffic_limit_bytes: int,
+        expire_at: datetime | None,
+        reset_usage: bool = True,
+    ) -> PanelUser:
+        if reset_usage:
+            response = await self._request(
+                "POST", ENDPOINTS["user_reset"].format(username=username)
+            )
+            if response.status_code >= 400 and response.status_code != 404:
+                raise PanelError(
+                    f"Panel refused the usage reset (HTTP {response.status_code})",
+                    code="PANEL_RENEW_FAILED",
+                )
+        return await self.update_user(
+            username,
+            **{
+                FIELDS["data_limit"]: traffic_limit_bytes,
+                FIELDS["expire"]: int(expire_at.timestamp()) if expire_at else 0,
+                FIELDS["status"]: "active",
+            },
+        )
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+        self._token = None

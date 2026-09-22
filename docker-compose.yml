@@ -1,0 +1,140 @@
+# =============================================================================
+# Nexus VPN — local / single-host deployment
+#
+# Every value comes from .env (git-ignored). No credential is written here.
+#
+# PostgreSQL and Redis deliberately have NO `ports:` section, so they are
+# reachable only on the internal Docker network — not from the Internet
+# (spec rule 39). Use `docker compose exec postgres psql ...` for a shell, or
+# an SSH tunnel; do not add a port mapping to "make it easier".
+# =============================================================================
+
+name: nexusvpn
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required — copy .env.example to .env}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run ./scripts/generate-secrets.sh}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  ADMIN_BOOTSTRAP_SECRET: ${ADMIN_BOOTSTRAP_SECRET:?ADMIN_BOOTSTRAP_SECRET is required}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+  PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-manual}
+  PAYMENT_API_KEY: ${PAYMENT_API_KEY:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-nexusvpn}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No `ports:` — not reachable from outside the compose network.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No `ports:` — not reachable from outside the compose network.
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [internal, edge]
+    # Bound to loopback only: nginx is the public entrypoint. Change to
+    # "8000:8000" only if you are deliberately exposing the API directly.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment: *backend-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [internal]
+    restart: "no"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment: *backend-env
+    # Phase 2 delivers the job definitions; the service is declared here so the
+    # topology is complete, and starts as a no-op until then.
+    command: ["python", "-m", "app.workers.worker"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [internal]
+    profiles: ["full"]
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment: *backend-env
+    command: ["python", "-m", "app.workers.scheduler"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [internal]
+    profiles: ["full"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # TLS material lives on the host and is never part of the image or repo.
+      - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on: [api]
+    networks: [edge]
+    profiles: ["full"]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  internal:
+    internal: true   # no route to the Internet from this network
+  edge:

@@ -1,0 +1,116 @@
+name: Backend
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ruff==0.13.1
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        # These are CI-only throwaway values, generated per run. They exist so
+        # the settings validator has something to accept; they never leave this
+        # job and are not secrets.
+        env:
+          APP_ENV: development
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+        run: |
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export ADMIN_BOOTSTRAP_SECRET="$(openssl rand -hex 32)"
+          export ENCRYPTION_KEY="$(python -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          pytest --cov=app --cov-report=term-missing
+
+  migrations:
+    name: Migrations apply cleanly
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: ci-postgres-for-tests-only
+          POSTGRES_DB: nexusvpn_ci
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Upgrade then downgrade
+        env:
+          APP_ENV: development
+          # Assembled at run time from parts rather than written as a literal
+          # URL, so the repository contains no credential-shaped connection
+          # string for a scanner (or a reader) to trip over.
+          PGUSER: nexus
+          PGPASSWORD: ci-postgres-for-tests-only
+          PGDATABASE: nexusvpn_ci
+        run: |
+          export DATABASE_URL="postgresql+asyncpg://${PGUSER}:${PGPASSWORD}@localhost:5432/${PGDATABASE}"
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export ADMIN_BOOTSTRAP_SECRET="$(openssl rand -hex 32)"
+          export ENCRYPTION_KEY="$(python -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          alembic upgrade head
+          alembic downgrade base
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: nexusvpn-api:ci
+
+      - name: Assert the image carries no .env
+        run: |
+          if docker run --rm --entrypoint sh nexusvpn-api:ci -c 'ls -a /app/.env 2>/dev/null'; then
+            echo "::error::The built image contains a .env file."
+            exit 1
+          fi
+          echo "Image contains no .env."

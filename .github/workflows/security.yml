@@ -1,0 +1,82 @@
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"   # weekly, catches newly-published advisories
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret that was committed and later deleted is
+          # still in the repository and must still fail the build.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # No GITLEAKS_LICENSE needed for a public repository.
+
+  forbidden-files:
+    name: Forbidden files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert no secret-bearing file is tracked
+        run: |
+          set -euo pipefail
+          # .env.example is the one allowed .env* file.
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+            echo "::error::A real .env file is tracked in git."
+            exit 1
+          fi
+          if git ls-files | grep -E '\.(pem|key|p12|pfx|jks|keystore|db|sqlite3?|dump)$'; then
+            echo "::error::A key, certificate or database file is tracked in git."
+            exit 1
+          fi
+          if git ls-files | grep -E '(google-services\.json|service-account.*\.json|firebase-adminsdk.*\.json|keystore\.properties)$'; then
+            echo "::error::A credentials file is tracked in git."
+            exit 1
+          fi
+          echo "No forbidden files are tracked."
+
+      - name: Assert .env.example has no filled-in values
+        run: |
+          set -euo pipefail
+          # Every secret in the template must be empty or an <angle-bracket>
+          # placeholder — never a real-looking literal.
+          if grep -nE '^(JWT_SECRET|JWT_REFRESH_SECRET|ENCRYPTION_KEY|ADMIN_BOOTSTRAP_SECRET|PAYMENT_API_KEY|POSTGRES_PASSWORD|PASARGUARD_PASSWORD)=' .env.example \
+             | grep -vE '=\s*$|=\s*<[^>]+>\s*$'; then
+            echo "::error::.env.example contains a filled-in secret value."
+            exit 1
+          fi
+          echo ".env.example carries placeholders only."
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Audit Python dependencies
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r backend/requirements.txt --strict || {
+            echo "::warning::pip-audit reported findings — review before release."
+            exit 1
+          }

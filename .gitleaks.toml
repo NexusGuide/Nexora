@@ -1,0 +1,97 @@
+# =============================================================================
+# gitleaks configuration for Nexus VPN
+# Runs in CI over the FULL git history and locally via the pre-commit hook.
+# =============================================================================
+title = "NexusVPN gitleaks config"
+
+[extend]
+useDefault = true
+
+# --- Project-specific rules -------------------------------------------------
+
+[[rules]]
+id = "nexus-jwt-secret"
+description = "JWT secret assigned a literal value"
+regex = '''(?i)(jwt[_-]?(refresh[_-]?)?secret)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{16,}['"]?'''
+tags = ["secret", "jwt"]
+
+[[rules]]
+id = "nexus-encryption-key"
+description = "Encryption key assigned a literal value"
+regex = '''(?i)(encryption[_-]?key|fernet[_-]?key)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{32,}['"]?'''
+tags = ["secret", "crypto"]
+
+[[rules]]
+id = "nexus-panel-password"
+description = "Panel credential assigned a literal value"
+regex = '''(?i)(pasarguard|marzban|xui|panel)[_-]?(password|pass|token|api[_-]?key)\s*[:=]\s*['"]?[^\s'"<>{}$]{6,}['"]?'''
+tags = ["secret", "panel"]
+
+[[rules]]
+id = "nexus-telegram-bot-token"
+description = "Telegram bot token"
+regex = '''\b\d{8,10}:[A-Za-z0-9_-]{35}\b'''
+tags = ["secret", "telegram"]
+
+[[rules]]
+id = "nexus-db-url-with-password"
+description = "Database URL containing an inline password"
+# The password character class excludes $ { } < >, so a URL built from shell
+# interpolation (${PGPASSWORD}) or from an <angle-bracket> placeholder is not
+# a finding — only a literal password is.
+regex = '''(?i)(postgres(ql)?|mysql|mongodb)(\+\w+)?://[^:\s/]+:[^@\s${}<>]{4,}@'''
+tags = ["secret", "database"]
+
+[[rules]]
+id = "nexus-payment-key"
+description = "Payment gateway key assigned a literal value"
+regex = '''(?i)(zibal|zarinpal|idpay|payment)[_-]?(api[_-]?key|merchant|secret)\s*[:=]\s*['"]?[A-Za-z0-9-]{8,}['"]?'''
+tags = ["secret", "payment"]
+
+# --- Allowlists -------------------------------------------------------------
+# Placeholders, documentation and deterministic test fixtures are not findings.
+# Kept narrow on purpose: a blanket exclusion of tests would let a real secret
+# hide in a test file.
+
+[[allowlists]]
+description = "Templates and documentation, which show placeholders by design"
+targets = ["match", "secret", "line"]
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  '''(^|/)docs/.*\.md$''',
+  '''(^|/)README\.md$''',
+  '''(^|/)SECURITY\.md$''',
+  '''(^|/)scripts/generate-secrets\.sh$''',
+]
+
+[[allowlists]]
+description = "Placeholder and interpolation syntax anywhere in the tree"
+targets = ["match", "secret", "line"]
+regexes = [
+  # Angle-bracket placeholders:  <generate-with-openssl-rand-hex-32>
+  '''<[a-zA-Z0-9 ._-]+>''',
+  # Shell/compose variable interpolation: ${VAR} or $VAR
+  '''\$\{?[A-Z_][A-Z0-9_]*\}?''',
+  # Obvious placeholder words
+  '''(?i)(changeme|placeholder|your[_-]?\w+[_-]?here|dummy|redacted|xxx+)''',
+  # Test-only deterministic values, by convention suffixed -for-tests-only
+  '''-for-tests-only''',
+]
+
+[[allowlists]]
+description = """
+Fixtures in the log-redaction test. These strings MUST be secret-shaped: the
+test asserts that the logging filter scrubs them. None is a real credential,
+and none is used anywhere outside this one file.
+"""
+targets = ["match", "secret", "line"]
+paths = ['''(^|/)backend/tests/test_log_redaction\.py$''']
+
+[[allowlists]]
+description = """
+Fixtures in the config-validation test, which feeds deliberately weak and
+placeholder values to the settings validator to prove they are rejected.
+"""
+targets = ["match", "secret", "line"]
+paths = ['''(^|/)backend/tests/test_config_security\.py$''']
