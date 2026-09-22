@@ -37,6 +37,13 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### The app builds
+
+`nexora-debug-main-f339805.apk`, 19.1 MB, assembled by CI: unit tests pass,
+lint runs, the APK is produced, and the secret scan over the built APK finds
+nothing. The Android client had never been compiled before this point, so
+everything in phase 4 up to now was unverified by construction.
+
 ### Fixed — the first Kotlin compilation
 
 With resources linking, the compiler ran for the first time and found seven

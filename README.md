@@ -211,7 +211,7 @@ database server.
 | 1 | Repository, Docker, Postgres, Redis, FastAPI, auth | **Done** |
 | 2 | Users, plans, subscriptions, orders | **Done** |
 | 3 | Panel manager, PasarGuard, config system | **Done** |
-| 4 | Android app: login, home, services, store | **Done** (first CI build pending) |
+| 4 | Android app: login, home, services, store | **Done** (builds in CI) |
 | 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
 | 6 | Payment, renewal, expiration, notifications | Not started |
 | 7 | Admin panel, RBAC, logs, analytics | Not started |
