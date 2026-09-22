@@ -52,6 +52,28 @@ jobs:
           fi
           echo "No forbidden files are tracked."
 
+      - name: Assert the hook and scripts are executable
+        run: |
+          set -euo pipefail
+          # git on Windows does not track the executable bit, so a `git add`
+          # from a Windows clone silently rewrites these to mode 644. That is
+          # not cosmetic: git skips a hook it cannot execute, so the
+          # secret-blocking pre-commit hook stops running and nobody is told.
+          failed=0
+          for f in .githooks/pre-commit \
+                   scripts/backup-db.sh \
+                   scripts/generate-secrets.sh \
+                   scripts/install-hooks.sh \
+                   android/gradlew; do
+            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
+            if [ "$mode" != "100755" ]; then
+              echo "::error file=$f::Mode is $mode, expected 100755. Restore it with: git update-index --chmod=+x $f"
+              failed=1
+            fi
+          done
+          [ "$failed" -eq 0 ] || exit 1
+          echo "The hook and all scripts are executable."
+
       - name: Assert .env.example has no filled-in values
         run: |
           set -euo pipefail

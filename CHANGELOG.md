@@ -37,6 +37,22 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — the executable bit, and how it went missing
+
+- **`.githooks/pre-commit` and all three `scripts/*.sh` had been rewritten to
+  mode 644** by a commit made from a Windows clone, where git does not track
+  the executable bit. This was not cosmetic: **git skips a hook it cannot
+  execute and says nothing**, so the secret-blocking pre-commit hook had
+  quietly stopped running, and `./scripts/install-hooks.sh` — step one of the
+  README's install instructions — would fail on a fresh clone. Modes restored.
+- **A CI guard now asserts all five files are mode 755**, naming the file and
+  the one-line fix. The failure mode is silent by nature, so it needed a check
+  rather than a note in a document.
+- **`.gitattributes`** normalises line endings to LF, with `*.bat`/`*.cmd`
+  pinned to CRLF and binaries marked. A CRLF reaching a shebang line makes
+  Linux look for an interpreter called `/bin/sh\r` and report "no such file or
+  directory" against the script — an error that points nowhere near the cause.
+
 ### Added — phase 4: the Android client
 
 - Kotlin + Jetpack Compose app under `android/`: sign-in, home, store,

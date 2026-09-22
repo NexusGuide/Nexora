@@ -1,0 +1,26 @@
+# Line endings are normalised in the repository, whatever the contributor's
+# platform. This is not cosmetic: the shell scripts, the git hook and gradlew
+# run on Linux in CI and in Docker. A CRLF on the shebang line makes the
+# kernel look for an interpreter literally called "/bin/sh\r", and the error
+# it reports is "no such file or directory" — pointing at the script, not at
+# the line ending, which is why this costs people an afternoon.
+* text=auto eol=lf
+
+# Windows batch files are the exception: cmd.exe requires CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touched, never diffed as text.
+*.jar   binary
+*.apk   binary
+*.aab   binary
+*.png   binary
+*.jpg   binary
+*.webp  binary
+*.ico   binary
+*.keystore binary
+*.jks   binary
+
+# Keep generated and vendored files out of diffs and language statistics.
+android/gradle/wrapper/gradle-wrapper.jar linguist-vendored
+backend/alembic/versions/*.py linguist-generated=false
