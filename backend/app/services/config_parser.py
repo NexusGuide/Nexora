@@ -122,3 +122,32 @@ def is_probably_config(uri: str) -> bool:
     if "://" not in uri or len(uri) < 12:
         return False
     return uri.split("://", 1)[0].lower() in SUPPORTED_SCHEMES
+
+
+def decode_subscription(body: str) -> list[str]:
+    """Extract config URIs from a subscription response.
+
+    A v2ray-style subscription is usually one base64 blob of newline-separated
+    URIs, but some panels serve the URIs as plain text. Both are accepted.
+    Anything that does not look like a supported config — blank lines, a
+    comment, an HTML error page served with 200 — is dropped rather than
+    stored, and duplicates keep their first position.
+    """
+    text = (body or "").strip()
+    if not text:
+        return []
+
+    if "://" not in text:
+        decoded = _decode_base64("".join(text.split()))
+        if decoded is None:
+            return []
+        text = decoded
+
+    seen: set[str] = set()
+    uris: list[str] = []
+    for line in text.splitlines():
+        uri = line.strip()
+        if is_probably_config(uri) and uri not in seen:
+            seen.add(uri)
+            uris.append(uri)
+    return uris

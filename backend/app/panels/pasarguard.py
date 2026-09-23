@@ -30,6 +30,7 @@ from app.panels.base import (
     PanelUsage,
     PanelUser,
 )
+from app.services.config_parser import decode_subscription
 
 logger = logging.getLogger(__name__)
 
@@ -296,8 +297,57 @@ class PasarGuardAdapter(PanelAdapter):
         )
 
     async def get_configs(self, username: str) -> list[str]:
+        """Config URIs for a user.
+
+        Older panels return them inline as ``links``. PasarGuard does not: its
+        user object has no ``links`` field at all, only ``subscription_url``,
+        so the URIs have to be fetched from the subscription itself. Reading
+        ``links`` alone returned nothing on a live panel even for a user with
+        full access.
+        """
         user = await self.get_user(username)
-        return user.configs if user else []
+        if user is None:
+            return []
+        if user.configs:
+            return list(user.configs)
+        if user.subscription_url:
+            return await self._links_from_subscription(user.subscription_url)
+        return []
+
+    async def _links_from_subscription(self, url: str) -> list[str]:
+        """Fetch a subscription and decode it into URIs.
+
+        The request carries **no Authorization header**. A subscription URL is
+        public by its token and is often served from a different host than the
+        panel's API; sending the panel's admin token there would hand full
+        control of the panel to whoever runs that host.
+        """
+        client = await self._http()
+        target = (
+            url
+            if url.startswith(("http://", "https://"))
+            else f"{self.credentials.base_url.rstrip('/')}/{url.lstrip('/')}"
+        )
+        try:
+            response = await client.get(
+                target,
+                # A v2ray client's user agent makes Marzban-family panels
+                # return the base64 link list rather than a Clash or sing-box
+                # document.
+                headers={"User-Agent": "v2rayNG/1.8.5", "Accept": "*/*"},
+                follow_redirects=True,
+            )
+        except httpx.HTTPError as exc:
+            raise PanelError(
+                "Could not fetch the user's subscription",
+                code="PANEL_SUBSCRIPTION_FAILED",
+            ) from exc
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Subscription fetch returned HTTP {response.status_code}",
+                code="PANEL_SUBSCRIPTION_FAILED",
+            )
+        return decode_subscription(response.text)
 
     async def renew_user(
         self,

@@ -7,6 +7,7 @@ skipped test protects nothing.
 
 from __future__ import annotations
 
+import base64
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -30,6 +31,7 @@ class FakePanel:
         expire_token_once: bool = False,
         group_based: bool = False,
         groups_as_object: bool = False,
+        sub_host: str = "",
     ):
         self.users: dict[str, dict] = {}
         # Group mode mirrors the real panel the first live purchase ran
@@ -48,6 +50,11 @@ class FakePanel:
             {"id": 4, "name": "empty", "inbound_tags": [], "is_disabled": False},
         ]
         self.last_create_body: dict | None = None
+        # Group mode also mirrors the real panel's user object: no "links"
+        # field at all, only subscription_url, which may live on another host.
+        self.sub_host = sub_host
+        self.sub_requests: list[httpx.Request] = []
+        self.links_by_user: dict[str, list[str]] = {}
         self.auth_ok = auth_ok
         self.expire_token_once = expire_token_once
         self.token_used = False
@@ -67,6 +74,13 @@ class FakePanel:
             self.token_used = True
             return httpx.Response(401, json={"detail": "token expired"})
 
+        if path.startswith("/sub/"):
+            self.sub_requests.append(request)
+            username = path.split("/sub/")[1].strip("/")
+            links = self.links_by_user.get(username, [])
+            blob = base64.b64encode("\n".join(links).encode()).decode()
+            return httpx.Response(200, text=blob)
+
         if path == "/api/groups":
             if not self.group_based:
                 return httpx.Response(404, json={"detail": "Not Found"})
@@ -82,6 +96,11 @@ class FakePanel:
             self.last_create_body = body
             username = body["username"]
             granted = not self.group_based or bool(body.get("group_ids"))
+            links = [
+                f"vless://uuid-1@de1.example.com:443?type=ws#{username}-DE",
+                f"vless://uuid-2@nl1.example.com:443?type=grpc#{username}-NL",
+            ]
+            self.links_by_user[username] = links if granted else []
             self.users[username] = {
                 "username": username,
                 "status": "active",
@@ -90,13 +109,13 @@ class FakePanel:
                 "expire": body.get("expire", 0),
                 "subscription_url": f"https://panel.example/sub/{username}",
                 "group_ids": body.get("group_ids", []),
-                "links": [
-                    f"vless://uuid-1@de1.example.com:443?type=ws#{username}-DE",
-                    f"vless://uuid-2@nl1.example.com:443?type=grpc#{username}-NL",
-                ]
-                if granted
-                else [],
             }
+            if self.group_based:
+                self.users[username]["subscription_url"] = (
+                    f"{self.sub_host}/sub/{username}"
+                )
+            else:
+                self.users[username]["links"] = links
             return httpx.Response(200, json=self.users[username])
 
         if path.startswith("/api/user/"):
@@ -276,20 +295,19 @@ async def test_a_user_created_without_a_group_gets_no_link(session):
     """The fake reproduces the real failure, so the fix below is meaningful."""
     panel = FakePanel(group_based=True)
     async with make_adapter(panel) as adapter:
-        user = await adapter.create_user(
-            "nx_nogroup", traffic_limit_bytes=GB, expire_at=None
-        )
-    assert list(user.configs) == []
+        await adapter.create_user("nx_nogroup", traffic_limit_bytes=GB, expire_at=None)
+        assert await adapter.get_configs("nx_nogroup") == []
 
 
 async def test_group_ids_are_sent_and_the_user_gets_links(session):
     panel = FakePanel(group_based=True)
     async with make_adapter(panel) as adapter:
-        user = await adapter.create_user(
+        await adapter.create_user(
             "nx_grouped", traffic_limit_bytes=GB, expire_at=None, group_ids=[1]
         )
+        configs = await adapter.get_configs("nx_grouped")
     assert panel.last_create_body["group_ids"] == [1]
-    assert len(list(user.configs)) == 2
+    assert len(configs) == 2
 
 
 async def test_no_group_ids_key_when_none_are_configured(session):
@@ -315,3 +333,49 @@ async def test_list_groups_is_empty_on_a_panel_without_groups(session):
     panel = FakePanel(group_based=False)
     async with make_adapter(panel) as adapter:
         assert await adapter.list_groups() == []
+
+
+# --- links come from the subscription, not the user object --------------------
+# A live PasarGuard user object has no "links" field; reading it alone returned
+# nothing even for a user with full access.
+
+
+async def test_links_are_read_from_the_subscription_url(session):
+    panel = FakePanel(group_based=True)
+    async with make_adapter(panel) as adapter:
+        await adapter.create_user(
+            "nx_sub", traffic_limit_bytes=GB, expire_at=None, group_ids=[1]
+        )
+        configs = await adapter.get_configs("nx_sub")
+    assert [c.split("#")[-1] for c in configs] == ["nx_sub-DE", "nx_sub-NL"]
+    assert len(panel.sub_requests) == 1
+
+
+async def test_the_admin_token_never_reaches_the_subscription_host(session):
+    """The subscription may be served by another machine entirely.
+
+    Sending the panel's admin bearer token there would give whoever runs that
+    host full control of the panel. The request must carry no Authorization.
+    """
+    panel = FakePanel(group_based=True, sub_host="https://sub.example.org")
+    async with make_adapter(panel) as adapter:
+        await adapter.create_user(
+            "nx_far", traffic_limit_bytes=GB, expire_at=None, group_ids=[1]
+        )
+        configs = await adapter.get_configs("nx_far")
+    assert len(configs) == 2
+    (sub_request,) = panel.sub_requests
+    assert sub_request.url.host == "sub.example.org"
+    assert "authorization" not in {k.lower() for k in sub_request.headers}
+
+
+async def test_a_failing_subscription_is_a_clean_panel_error(session):
+    panel = FakePanel(group_based=True)
+    async with make_adapter(panel) as adapter:
+        await adapter.create_user(
+            "nx_err", traffic_limit_bytes=GB, expire_at=None, group_ids=[1]
+        )
+        panel.users["nx_err"]["subscription_url"] = "/missing/nx_err"
+        with pytest.raises(PanelError) as exc:
+            await adapter.get_configs("nx_err")
+    assert exc.value.code == "PANEL_SUBSCRIPTION_FAILED"

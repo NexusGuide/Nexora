@@ -37,6 +37,31 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — config links were read from a field the panel does not have
+
+The probe's view of a real provisioned user settled a second problem before
+it could cost another purchase: a live PasarGuard user object has **no `links`
+field at all**, only `subscription_url`. The adapter read `links` and nothing
+else, so even with the group fix every customer would still have received no
+config.
+
+- `get_configs` falls back to fetching the user's subscription and decoding it.
+  `decode_subscription` accepts a base64 blob (wrapped or unpadded) or plain
+  text, and drops anything that is not a supported URI — comments, blank lines,
+  an HTML error page served with 200.
+- **The subscription request carries no Authorization header**, and a test
+  pins it. A subscription URL is public by its token and is often served from
+  a different machine than the panel's API — this deployment's DNS has a
+  separate subscription host — and sending the admin token there would hand
+  that machine full control of the panel.
+- The mocked panel now matches the real one in group mode: no `links` field,
+  a subscription URL that may live on another host, and links only for a user
+  in a group. Eleven more tests; 194 in all.
+
+The same probe showed `expire` is an ISO string on this panel, not a Unix
+timestamp; reads already accepted both. It also showed `hwid_limit`, the
+panel's device limit, which provisioning does not set yet — noted, not changed.
+
 ### Fixed — provisioned users get no configs
 
 The probe settled it: the panel is **group-based**. `/api/groups` answered with

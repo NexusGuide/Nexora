@@ -155,3 +155,35 @@ def test_is_probably_config_rejects_noise():
     assert not is_probably_config("# a comment from the panel")
     assert not is_probably_config("https://panel.example.com/sub/abc")
     assert not is_probably_config("vless://")
+
+
+# --- subscription decoding ----------------------------------------------------
+import base64 as _b64  # noqa: E402
+
+from app.services.config_parser import decode_subscription  # noqa: E402
+
+_LINKS = [
+    "vless://u1@de.example.com:443?type=ws#DE",
+    "trojan://p@nl.example.com:443#NL",
+]
+
+
+def test_decodes_a_base64_subscription():
+    blob = _b64.b64encode("\n".join(_LINKS).encode()).decode()
+    assert decode_subscription(blob) == _LINKS
+
+
+def test_decodes_base64_that_is_wrapped_and_unpadded():
+    blob = _b64.b64encode("\n".join(_LINKS).encode()).decode().rstrip("=")
+    wrapped = "\n".join(blob[i : i + 20] for i in range(0, len(blob), 20))
+    assert decode_subscription(wrapped) == _LINKS
+
+
+def test_accepts_a_plain_text_subscription_and_drops_noise():
+    body = "\n".join(["# comment", "", _LINKS[0], "not a uri", _LINKS[1], _LINKS[0]])
+    assert decode_subscription(body) == _LINKS
+
+
+def test_an_html_error_page_yields_nothing():
+    assert decode_subscription("<html><body>502 Bad Gateway</body></html>") == []
+    assert decode_subscription("") == []
