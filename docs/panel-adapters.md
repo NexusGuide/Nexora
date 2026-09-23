@@ -97,15 +97,22 @@ Implemented against PasarGuard's Marzban-compatible REST surface: token auth at
 `/api/admin/token`, user CRUD under `/api/user`, usage reset at
 `/api/user/{username}/reset`.
 
-**Verify before production use.** The endpoint paths and field names in
-`ENDPOINTS` and `FIELDS` match the documented Marzban-compatible API, but they
-have not been exercised against a live PasarGuard instance in this repository.
-Before going live:
+**Authentication and reachability are verified against a live panel.** The
+connection test (`POST /api/v1/admin/panels/{id}/test`) has been run against a
+running PasarGuard instance and passes, which confirms the base URL handling
+and the token endpoint at `/api/admin/token`.
 
-1. Add the panel in the admin panel with its credentials.
-2. Run the connection test.
-3. Create a throwaway user, read it back, check traffic and expiry, then delete
-   it.
+**The user-lifecycle calls are not yet confirmed.** Reachability proves the
+adapter can authenticate; it does not prove that create, read, reset and delete
+agree with your panel's API version. Before selling a real subscription:
+
+1. Register a plan and a server bound to this panel.
+2. Put a test order through to provisioning and check the panel shows the user.
+3. Read it back — traffic and expiry should match what the plan specifies.
+
+```bash
+bash scripts/register-panel.sh     # registers a panel and runs the test
+```
 
 If a call fails, correct `ENDPOINTS` or `FIELDS` in `app/panels/pasarguard.py`.
 Do not work around a mismatch in calling code — that is how the abstraction

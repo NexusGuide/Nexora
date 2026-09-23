@@ -37,6 +37,19 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Verified — the PasarGuard adapter reaches a live panel
+
+Open since phase 1, and the longest-standing risk in the project: the
+adapter's endpoint paths were written from documentation and had never been
+run against a real panel. `POST /api/v1/admin/panels/{id}/test` now passes
+against a production PasarGuard instance.
+
+What that proves and what it does not: authentication at `/api/admin/token`
+and the base-URL handling are correct. It does **not** prove that user create,
+read, reset and delete agree with that panel's API version — reachability is
+one call. `docs/panel-adapters.md` now says exactly that rather than either
+extreme.
+
 ### Added — `scripts/register-panel.sh`
 
 Registering a panel meant a hand-written `curl` with the panel's admin
