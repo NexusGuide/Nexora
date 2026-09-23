@@ -37,6 +37,35 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Added — plan management, and an end-to-end purchase test
+
+**There was no way to create a plan.** Panels and servers had admin endpoints;
+plans did not, so the store was permanently empty and nothing could be bought
+without writing SQL by hand — the same gap the panel endpoints were added to
+close in phase 3, with plans overlooked.
+
+- `POST /api/v1/admin/plans`, `GET /api/v1/admin/plans` (including inactive
+  ones, unlike the store listing) and `PATCH /api/v1/admin/plans/{id}`.
+  Traffic is given in GB, because that is how plans are sold and how panels
+  express quotas, and converted to bytes once so no other layer has to agree
+  what a GB is.
+- Finance may set pricing alongside the operators who run the fleet; Support
+  may not.
+- A plan is retired by setting its status, never deleted: orders reference it,
+  and each order already carries its own snapshot, so editing a plan cannot
+  retroactively change what an existing customer bought.
+
+**`scripts/smoke-purchase.sh`** runs the commercial path in one go against a
+live deployment: create plan and server, register a throwaway customer, order,
+confirm payment, wait for the worker to provision, print the configs. It sends
+the order twice with the same idempotency key and reports whether the second
+returned the original — the guard that stops a retry charging twice, checked
+against the real database rather than a test double.
+
+It prints only each config's protocol, name and host. `config_data` is the
+connection URI and carries the subscriber's credential, so the run can be
+shared without leaking one.
+
 ### Verified — the PasarGuard adapter reaches a live panel
 
 Open since phase 1, and the longest-standing risk in the project: the

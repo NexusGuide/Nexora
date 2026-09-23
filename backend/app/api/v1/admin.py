@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.models.billing import Plan
 from app.models.enums import AdminRole
 from app.models.panel import Panel, Server
 from app.models.user import User
@@ -26,6 +27,9 @@ from app.schemas.admin import BootstrapRequest
 from app.schemas.billing import (
     PanelCreate,
     PanelPublic,
+    PlanCreate,
+    PlanPublic,
+    PlanUpdate,
     ServerCreate,
     ServerPublic,
 )
@@ -337,3 +341,108 @@ async def bootstrap_owner(
         {"id": user.id, "username": user.username, "admin_role": user.admin_role.value},
         request,
     )
+
+
+# ------------------------------------------------------------------- plans
+# Pricing is a commercial decision, so Finance may set it as well as the
+# operators who run the fleet. Support may not.
+PlanAdmin = Annotated[
+    User,
+    Depends(require_roles(AdminRole.MANAGER, AdminRole.DEVELOPER, AdminRole.FINANCE)),
+]
+
+
+@router.post(
+    "/plans",
+    response_model=SuccessResponse[PlanPublic],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a plan",
+)
+async def create_plan(
+    payload: PlanCreate,
+    request: Request,
+    session: SessionDep,
+    admin: PlanAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Without this, the store is empty and nothing can be bought.
+
+    Traffic arrives in GB and is stored in bytes, converted once here so no
+    other layer has to agree about what a GB is.
+    """
+    plan = Plan(
+        name=payload.name,
+        description=payload.description,
+        duration_days=payload.duration_days,
+        traffic_limit_bytes=payload.traffic_limit_bytes,
+        device_limit=payload.device_limit,
+        price=payload.price,
+        currency=payload.currency,
+        status=payload.status,
+        sort_order=payload.sort_order,
+    )
+    session.add(plan)
+    await session.flush()
+
+    await PanelService(session).record_audit(
+        actor_id=admin.id,
+        action="plan.create",
+        entity="plan",
+        entity_id=plan.id,
+        ip_address=ip,
+        metadata={"name": plan.name, "price": str(plan.price)},
+    )
+    await session.commit()
+    return _envelope(PlanPublic.model_validate(plan), request)
+
+
+@router.get(
+    "/plans",
+    response_model=SuccessResponse[list[PlanPublic]],
+    summary="List every plan, including inactive ones",
+)
+async def list_all_plans(request: Request, session: SessionDep, admin: PlanAdmin):
+    """Unlike the store listing, this shows plans that are not on sale."""
+    plans = await session.scalars(select(Plan).order_by(Plan.sort_order, Plan.price))
+    return _envelope([PlanPublic.model_validate(p) for p in plans], request)
+
+
+@router.patch(
+    "/plans/{plan_id}",
+    response_model=SuccessResponse[PlanPublic],
+    summary="Change a plan's price, name or availability",
+)
+async def update_plan(
+    plan_id: str,
+    payload: PlanUpdate,
+    request: Request,
+    session: SessionDep,
+    admin: PlanAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Editing a plan never changes what an existing customer bought.
+
+    Each order carries its own snapshot of the plan taken at purchase time, so
+    raising a price or retiring a tier leaves live subscriptions untouched.
+    Retire a plan by setting `status` to INACTIVE rather than deleting it —
+    orders reference it, and deleting would orphan their history.
+    """
+    plan = await session.get(Plan, plan_id)
+    if plan is None:
+        raise NotFoundError("No such plan")
+
+    changed = payload.model_dump(exclude_unset=True)
+    for field, value in changed.items():
+        setattr(plan, field, value)
+    await session.flush()
+
+    await PanelService(session).record_audit(
+        actor_id=admin.id,
+        action="plan.update",
+        entity="plan",
+        entity_id=plan.id,
+        ip_address=ip,
+        metadata={k: str(v) for k, v in changed.items()},
+    )
+    await session.commit()
+    return _envelope(PlanPublic.model_validate(plan), request)

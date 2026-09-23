@@ -46,6 +46,43 @@ class PlanPublic(BaseModel):
         return round(self.traffic_limit_bytes / BYTES_PER_GB, 2)
 
 
+class PlanCreate(BaseModel):
+    """Admin input for creating a purchasable plan.
+
+    Traffic is given in GB because that is how plans are sold and how panels
+    express quotas; it is converted to bytes once, here, so no other layer has
+    to agree about what a GB is. 0 means unlimited.
+    """
+
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    duration_days: int = Field(..., ge=1, le=3650)
+    traffic_limit_gb: float = Field(..., ge=0, le=1_000_000)
+    device_limit: int = Field(default=1, ge=1, le=100)
+    price: Decimal = Field(..., ge=0, max_digits=14, decimal_places=2)
+    currency: str = Field(default="IRT", min_length=3, max_length=8)
+    status: PlanStatus = PlanStatus.ACTIVE
+    sort_order: int = Field(default=0, ge=0, le=9999)
+
+    @property
+    def traffic_limit_bytes(self) -> int:
+        return int(self.traffic_limit_gb * BYTES_PER_GB)
+
+
+class PlanUpdate(BaseModel):
+    """Every field optional: this patches a plan rather than replacing it.
+
+    Changing a plan never rewrites what an existing customer bought — each
+    order stores its own snapshot of the plan at purchase time.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    price: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    status: PlanStatus | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
+
+
 class OrderCreate(BaseModel):
     plan_id: str = Field(..., min_length=1, max_length=36)
 
