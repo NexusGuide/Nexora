@@ -244,9 +244,22 @@ $(printf '\033[0;32mDeployed.\033[0m')
   Status     docker compose ps
 
 Next:
-  1. Back up ENCRYPTION_KEY from .env somewhere off this server.
-  2. Set API_BASE_URL to https://$DOMAIN/ in the GitHub repository variables,
-     so CI builds an APK that talks to this server.
-  3. Create the first admin account with ADMIN_BOOTSTRAP_SECRET from .env.
+
+  1. Back up ENCRYPTION_KEY from .env somewhere off this server:
+       grep ^ENCRYPTION_KEY= .env
+
+  2. Set API_BASE_URL to https://$DOMAIN/ in the GitHub repository
+     variables, so CI builds an APK that talks to this server.
+
+  3. Claim the owner account. Register normally first, then promote it —
+     the promote endpoint closes for good once an administrator exists:
+
+       curl -sS -X POST https://$DOMAIN/api/v1/auth/register \\
+         -H 'Content-Type: application/json' \\
+         -d '{"username":"YOURNAME","email":"you@example.com","password":"CHOOSE-A-STRONG-ONE"}'
+
+       curl -sS -X POST https://$DOMAIN/api/v1/admin/bootstrap \\
+         -H 'Content-Type: application/json' \\
+         -d "{\\"secret\\":\\"\$(grep ^ADMIN_BOOTSTRAP_SECRET= .env | cut -d= -f2-)\\",\\"identifier\\":\\"YOURNAME\\"}"
 
 EOF

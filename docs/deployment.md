@@ -84,7 +84,25 @@ rendered file carries your domain and stays out of the repository.
 1. **Back up `ENCRYPTION_KEY`** from `.env`, somewhere that is not this server.
 2. **Set `API_BASE_URL`** to `https://api.your-domain.com/` in the GitHub
    repository variables, so CI builds an APK that talks to this server.
-3. **Create the first admin account** using `ADMIN_BOOTSTRAP_SECRET` from `.env`.
+3. **Claim the owner account.** A fresh deployment has no administrator, and
+   every admin route requires one. Register through the normal endpoint, then
+   promote that account with `ADMIN_BOOTSTRAP_SECRET`:
+
+   ```bash
+   curl -sS -X POST https://api.your-domain.com/api/v1/auth/register \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"you","email":"you@example.com","password":"a-strong-one"}'
+
+   curl -sS -X POST https://api.your-domain.com/api/v1/admin/bootstrap \
+     -H 'Content-Type: application/json' \
+     -d "{\"secret\":\"$(grep ^ADMIN_BOOTSTRAP_SECRET= .env | cut -d= -f2-)\",\"identifier\":\"you\"}"
+   ```
+
+   `POST /api/v1/admin/bootstrap` **closes permanently** the moment any user
+   holds an admin role — from then on it answers 409 to everything, including
+   a correct secret, so it cannot be used to guess one afterwards. It only
+   raises the privileges of an account that already exists; it never creates
+   one.
 
 ## Why Postgres and Redis have no published ports
 

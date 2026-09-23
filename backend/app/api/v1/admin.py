@@ -10,6 +10,7 @@ Credentials go in encrypted and never come back out.
 
 from __future__ import annotations
 
+import hmac
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
@@ -17,10 +18,11 @@ from sqlalchemy import select
 
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 from app.models.enums import AdminRole
 from app.models.panel import Panel, Server
 from app.models.user import User
+from app.schemas.admin import BootstrapRequest
 from app.schemas.billing import (
     PanelCreate,
     PanelPublic,
@@ -263,5 +265,75 @@ async def confirm_manual_payment(
             "newly_paid": transitioned,
             "job_id": job_id,
         },
+        request,
+    )
+
+
+# ----------------------------------------------------------------- bootstrap
+@router.post(
+    "/bootstrap",
+    summary="Promote the first user to OWNER",
+    status_code=status.HTTP_200_OK,
+)
+async def bootstrap_owner(
+    payload: BootstrapRequest,
+    request: Request,
+    session: SessionDep,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Grant OWNER to an existing account, once, using ADMIN_BOOTSTRAP_SECRET.
+
+    A fresh deployment has no administrator, and every other admin route
+    requires one — so without this there is no way in except editing the
+    database by hand.
+
+    Three things keep it from being a back door:
+
+    * **It closes permanently.** The moment any user holds an admin role, this
+      returns 409 forever. The window is the deployment window.
+    * **It does not create accounts.** The person registers through the normal
+      endpoint first; this only raises the privileges of an account that
+      already exists, so there is no second user-creation path to audit.
+    * **The secret is compared in constant time**, and a wrong one answers the
+      same way whether or not the named account exists.
+    """
+    settings = get_settings()
+
+    # Checked before the secret, so a late caller cannot use this endpoint as
+    # an oracle for guessing the secret: once an owner exists every request
+    # gets 409 regardless of what was sent.
+    existing = await session.scalar(
+        select(User).where(User.admin_role.is_not(None)).limit(1)
+    )
+    if existing is not None:
+        raise ConflictError("An administrator already exists. This endpoint is closed.")
+
+    if not hmac.compare_digest(payload.secret, settings.admin_bootstrap_secret):
+        raise PermissionDeniedError("Invalid bootstrap secret")
+
+    identifier = payload.identifier.strip().lower()
+    user = await session.scalar(
+        select(User).where((User.username == identifier) | (User.email == identifier))
+    )
+    if user is None:
+        raise NotFoundError(
+            "No such account. Register it through /api/v1/auth/register first."
+        )
+
+    user.admin_role = AdminRole.OWNER
+    await session.flush()
+
+    await PanelService(session).record_audit(
+        actor_id=user.id,
+        action="admin.bootstrap_owner",
+        entity="user",
+        entity_id=user.id,
+        ip_address=ip,
+        metadata={"username": user.username},
+    )
+    await session.commit()
+
+    return _envelope(
+        {"id": user.id, "username": user.username, "admin_role": user.admin_role.value},
         request,
     )

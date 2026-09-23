@@ -37,6 +37,34 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Added — there was no way to create the first administrator
+
+`ADMIN_BOOTSTRAP_SECRET` was required at boot, validated for entropy and
+placeholders, redacted in logs, documented in the README — and **read by
+nothing**. A fresh deployment had no administrator, every admin route requires
+one, and there was no route that could grant it. The only way in was editing
+the database by hand. The deploy script cheerfully printed "create the first
+admin account with ADMIN_BOOTSTRAP_SECRET", which could not be done.
+
+`POST /api/v1/admin/bootstrap` now does it, built so it is a deployment step
+rather than a back door:
+
+- **It closes permanently.** The moment any user holds an admin role it
+  answers 409 to everything. The window is the deployment window.
+- **The closed check runs before the secret check**, so a late caller cannot
+  use the status code to tell a correct secret from a wrong one — otherwise a
+  closed endpoint becomes an oracle for guessing the secret it still holds.
+- **It never creates accounts.** The operator registers through the normal
+  endpoint; this only raises an existing account's privileges, so there is no
+  second user-creation path.
+- The secret is compared with `hmac.compare_digest`, and the promotion is
+  audit-logged like every other admin action.
+
+Eight tests at the HTTP layer rather than against the service beneath it,
+because what matters is precisely what a caller on the Internet can do with
+it — including that a wrong secret grants nothing and that the closed
+endpoint's answer is byte-identical whether the secret was right or wrong.
+
 ### Fixed — deploy.sh aborted reading its own .env
 
 The first real deployment got as far as writing `.env` and then died with
