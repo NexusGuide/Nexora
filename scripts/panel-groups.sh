@@ -26,6 +26,24 @@ green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
 dim()   { printf '\033[0;90m%s\033[0m\n' "$*"; }
 jq_()   { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
 
+# Pick the first panel, telling "there is none" apart from "the request failed".
+# Reporting a failed request as "no panel registered" once sent the operator
+# looking for a missing panel when the real cause was an unapplied migration.
+first_panel() {
+    python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError:
+    print('ERR\t' + ' '.join(raw.split())[:200]); sys.exit()
+if not d.get('success'):
+    e = d.get('error') or {}
+    print('ERR\t' + str(e.get('code')) + ': ' + str(e.get('message'))); sys.exit()
+rows = d.get('data') or []
+print('OK\t' + (rows[0]['id'] + '\t' + rows[0]['name'] if rows else ''))"
+}
+
 echo
 printf 'Nexora admin username: '; read -r AU
 printf 'Nexora admin password: '; read -rs AP; echo
@@ -37,8 +55,12 @@ TOKEN=$(echo "$LOGIN" | jq_ "d['data']['tokens']['access_token']")
 AUTH=(-H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json')
 
 PANELS=$(curl -sS "$API/api/v1/admin/panels" "${AUTH[@]}")
-PANEL_ID=$(echo "$PANELS" | jq_ "d['data'][0]['id']")
-PANEL_NAME=$(echo "$PANELS" | jq_ "d['data'][0]['name']")
+IFS=$'\t' read -r P_STATE PANEL_ID PANEL_NAME <<< "$(echo "$PANELS" | first_panel)"
+if [ "$P_STATE" != "OK" ]; then
+    red "Could not list panels: $PANEL_ID"
+    echo "  If this mentions a missing column, run: docker compose run --rm migrate"
+    exit 1
+fi
 [ -n "$PANEL_ID" ] || { red "No panel registered. Run scripts/register-panel.sh first."; exit 1; }
 
 echo

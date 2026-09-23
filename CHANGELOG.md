@@ -37,6 +37,33 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — scripts reported a failed request as "no panel registered"
+
+After a rebuild without the new migration, listing panels failed with a 500 —
+the new `default_group_ids` column did not exist yet — and `panel-groups.sh`
+and `smoke-purchase.sh` both reported **"No panel registered"**, sending the
+operator looking for a panel that was there all along. They now distinguish an
+empty list from a failed request, print the API's own error code and message,
+and point at the migration. Checked against a found panel, an empty list, an
+API error envelope and a non-JSON 502 page.
+
+### Added — `scripts/update.sh`, and why an update can answer 502
+
+Right after a rebuild the public hostname answered **502 Bad Gateway** while
+the api container itself was healthy. nginx resolves `api` to an address once,
+at start; rebuilding recreates the container, which can return on a different
+address, and nginx keeps proxying to the old one. Earlier rebuilds happened to
+get the same address back, which is what made this look intermittent.
+
+`scripts/update.sh` does pull, migrate, rebuild, waits for the api to report
+healthy, restarts nginx, and verifies through the public hostname — the
+sequence that was being pasted by hand after every change, where a mistyped
+line had already cost time more than once.
+
+Re-resolving in nginx itself (a resolver plus a variable upstream) would also
+fix it, but a wrong nginx config takes the whole site down and cannot be
+validated from here, so the restart is the safe fix for now.
+
 ### Fixed — config links were read from a field the panel does not have
 
 The probe's view of a real provisioned user settled a second problem before

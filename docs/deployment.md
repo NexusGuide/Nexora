@@ -130,11 +130,16 @@ ssh -L 5432:localhost:5432 user@server -N
 ## Updating
 
 ```bash
-git pull
-docker compose build api worker scheduler
-docker compose run --rm migrate
-docker compose --profile full up -d
+bash scripts/update.sh
 ```
+
+Pull, migrate, rebuild, restart nginx, verify through the public hostname.
+
+The nginx restart matters. nginx resolves the name `api` to an address once,
+when it starts; rebuilding recreates the api container, which can come back on
+a different address inside Docker's network. nginx keeps sending traffic to the
+old one and answers **502 Bad Gateway** until it is restarted. Because Docker
+only sometimes hands out a new address, this looks intermittent.
 
 Migrations run as a separate one-shot service, not on API startup: two API
 replicas starting together would otherwise race to migrate the same database.

@@ -27,6 +27,24 @@ step()  { printf '\n\033[0;36m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 dim()   { printf '\033[0;90m%s\033[0m\n' "$*"; }
 
 jq_() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
+
+# Pick the first panel, telling "there is none" apart from "the request failed".
+# Reporting a failed request as "no panel registered" once sent the operator
+# looking for a missing panel when the real cause was an unapplied migration.
+first_panel() {
+    python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError:
+    print('ERR\t' + ' '.join(raw.split())[:200]); sys.exit()
+if not d.get('success'):
+    e = d.get('error') or {}
+    print('ERR\t' + str(e.get('code')) + ': ' + str(e.get('message'))); sys.exit()
+rows = d.get('data') or []
+print('OK\t' + (rows[0]['id'] + '\t' + rows[0]['name'] if rows else ''))"
+}
 pyjson() { python3 -c 'import json,sys;print(json.dumps(json.loads(sys.argv[1])))' "$1"; }
 
 fail() { red "$1"; shift; echo "$*" | head -c 500; echo; exit 1; }
@@ -58,8 +76,9 @@ AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json
 # --- the panel and the node it fronts ---------------------------------------
 step "Panel"
 PANELS=$(curl -sS "$API/api/v1/admin/panels" "${AUTH[@]}")
-PANEL_ID=$(echo "$PANELS" | jq_ "d['data'][0]['id']")
-PANEL_NAME=$(echo "$PANELS" | jq_ "d['data'][0]['name']")
+IFS=$'\t' read -r P_STATE PANEL_ID PANEL_NAME <<< "$(echo "$PANELS" | first_panel)"
+[ "$P_STATE" = "OK" ] || fail "Could not list panels: $PANEL_ID" \
+    "If this mentions a missing column, run: docker compose run --rm migrate"
 [ -n "$PANEL_ID" ] || fail "No panel registered." "Run scripts/register-panel.sh first."
 green "Using panel '$PANEL_NAME' ($PANEL_ID)"
 
