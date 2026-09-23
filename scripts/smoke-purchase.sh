@@ -72,6 +72,20 @@ echo "$PTEST" | grep -q '"reachable":true' \
     || fail "The panel is not reachable from the API — fix that before buying." "$PTEST"
 green "Panel reachable"
 
+# On a group-based panel, a customer placed in no group gets an account and no
+# config. Refuse to buy until groups are chosen, rather than discover it after
+# paying.
+HAS_GROUPS=$(curl -sS "$API/api/v1/admin/panels/$PANEL_ID/groups" "${AUTH[@]}" | python3 -c "
+import sys, json
+d = json.load(sys.stdin).get('data') or []
+print('none-needed' if not d else ('yes' if any(g['is_default'] for g in d) else 'no'))" 2>/dev/null)
+case "$HAS_GROUPS" in
+    yes)         green "Default group set" ;;
+    none-needed) dim "Panel has no group model — none needed" ;;
+    *)           fail "No default group is set for this panel." \
+                      "Run: bash scripts/panel-groups.sh" ;;
+esac
+
 step "Server"
 # Reuse a server already registered against this panel. Creating one per run
 # would leave a trail of duplicate, healthy server rows that provisioning is
@@ -237,5 +251,10 @@ else
 fi
 
 echo
+# The panel account is not named after the customer: provisioning derives it
+# from the subscription id, so customer identity never reaches the panel. Its
+# name is "nx_" + the first 16 hex characters of that id + 6 random ones.
+PANEL_PREFIX="nx_$(echo "$SUB_ID" | tr -d '-' | cut -c1-16)"
 dim "The smoke plan has been archived. One thing is left for you:"
-dim "  delete the panel user $CUST in PasarGuard"
+dim "  delete the panel user whose name starts with  $PANEL_PREFIX"
+dim "  (it is not named $CUST — that is the Nexora account)"

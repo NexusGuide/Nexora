@@ -11,6 +11,7 @@ Credentials go in encrypted and never come back out.
 from __future__ import annotations
 
 import hmac
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
@@ -18,7 +19,12 @@ from sqlalchemy import select
 
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
-from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.models.billing import Order, Plan
 from app.models.enums import AdminRole, OrderStatus
 from app.models.panel import Panel, Server
@@ -26,6 +32,8 @@ from app.models.user import User
 from app.schemas.admin import BootstrapRequest
 from app.schemas.billing import (
     PanelCreate,
+    PanelGroupPublic,
+    PanelGroupsUpdate,
     PanelPublic,
     PlanCreate,
     PlanPublic,
@@ -111,6 +119,94 @@ async def test_panel(
     ok, error = await PanelService(session).check_panel(panel_id)
     await session.commit()
     return _envelope({"reachable": ok, "error": error}, request)
+
+
+@router.get(
+    "/panels/{panel_id}/groups",
+    response_model=SuccessResponse[list[PanelGroupPublic]],
+    summary="List a panel's access groups, live",
+)
+async def list_panel_groups(
+    panel_id: str, request: Request, session: SessionDep, admin: PanelAdmin
+):
+    """Read from the panel itself, so the list is never stale."""
+    panel = await session.get(Panel, panel_id)
+    if panel is None:
+        raise NotFoundError("Panel not found", code="PANEL_NOT_FOUND")
+
+    service = PanelService(session)
+    async with service.manager.adapter_for(panel) as adapter:
+        groups = await adapter.list_groups()
+
+    chosen = set(panel.group_id_list)
+    return _envelope(
+        [
+            PanelGroupPublic(
+                id=g.id,
+                name=g.name,
+                inbound_count=g.inbound_count,
+                is_disabled=g.is_disabled,
+                is_default=g.id in chosen,
+            )
+            for g in groups
+        ],
+        request,
+    )
+
+
+@router.put(
+    "/panels/{panel_id}/groups",
+    response_model=SuccessResponse[PanelPublic],
+    summary="Choose the groups new users on this panel are placed in",
+)
+async def set_panel_groups(
+    panel_id: str,
+    payload: PanelGroupsUpdate,
+    request: Request,
+    session: SessionDep,
+    admin: PanelAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Validated against the panel, not trusted.
+
+    A group id that does not exist, is disabled, or grants no inbound would
+    let provisioning succeed while every customer received no config — the
+    failure this setting exists to prevent. So each id is checked against the
+    panel's own list before it is stored.
+    """
+    panel = await session.get(Panel, panel_id)
+    if panel is None:
+        raise NotFoundError("Panel not found", code="PANEL_NOT_FOUND")
+
+    service = PanelService(session)
+    async with service.manager.adapter_for(panel) as adapter:
+        available = {g.id: g for g in await adapter.list_groups()}
+
+    wanted = list(dict.fromkeys(payload.group_ids))  # de-duplicate, keep order
+    problems = []
+    for gid in wanted:
+        group = available.get(gid)
+        if group is None:
+            problems.append(f"group {gid} does not exist on this panel")
+        elif group.is_disabled:
+            problems.append(f"group {gid} ({group.name}) is disabled")
+        elif group.inbound_count == 0:
+            problems.append(f"group {gid} ({group.name}) grants no inbound")
+    if problems:
+        raise ValidationError("; ".join(problems), code="INVALID_PANEL_GROUPS")
+
+    panel.default_group_ids = json.dumps(wanted)
+    await session.flush()
+    await service.record_audit(
+        actor_id=admin.id,
+        action="panel.set_groups",
+        entity="panel",
+        entity_id=panel.id,
+        ip_address=ip,
+        metadata={"group_ids": wanted},
+    )
+    await session.commit()
+    return _envelope(PanelPublic.model_validate(panel), request)
 
 
 @router.patch(

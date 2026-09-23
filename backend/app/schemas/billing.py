@@ -202,6 +202,20 @@ class ConfigPublic(BaseModel):
     updated_at: datetime
 
 
+class PanelGroupPublic(BaseModel):
+    id: int
+    name: str
+    inbound_count: int
+    is_disabled: bool
+    is_default: bool = False
+
+
+class PanelGroupsUpdate(BaseModel):
+    """The groups new users on this panel are placed in."""
+
+    group_ids: list[int] = Field(..., min_length=1, max_length=20)
+
+
 class PanelCreate(BaseModel):
     """Admin input for registering a panel.
 
@@ -241,6 +255,10 @@ class PanelPublic(BaseModel):
     base_url: str
     status: PanelStatus
     verify_tls: bool
+    # Groups every new user is placed in; empty until an operator chooses.
+    group_id_list: list[int] = Field(
+        default_factory=list, serialization_alias="default_group_ids"
+    )
     last_checked_at: datetime | None = None
     last_error: str | None = None
     created_at: datetime

@@ -37,6 +37,35 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — provisioned users get no configs
+
+The probe settled it: the panel is **group-based**. `/api/groups` answered with
+two groups, each granting one inbound. Access on this model comes from group
+membership, and the adapter created every user in no group — so each paid
+customer got an active account with no link.
+
+- `create_user` sends `group_ids` when the panel has groups configured, and
+  omits the field otherwise, so a Marzban-style panel is not sent a key it does
+  not know.
+- Each panel stores `default_group_ids` (migration `b7d1c2e9a4f0`, nullable,
+  so existing panels behave exactly as before until an operator chooses).
+- `GET` and `PUT /api/v1/admin/panels/{id}/groups`. The list is read live from
+  the panel; the choice is **validated against it** — a missing, disabled or
+  inbound-less group is refused, because any of them would reproduce the bug.
+- `scripts/panel-groups.sh` lists and chooses, until the phase 7 admin panel.
+- `smoke-purchase.sh` refuses to buy when a group-based panel has no default.
+
+The mocked panel in the test suite returned links for every user, whatever it
+was sent. That is why the suite passed while the real panel returned nothing.
+It now models groups: in group mode, a user created without one gets no link,
+and a test asserts exactly that before the fix is tested. Fourteen tests;
+187 in all.
+
+The probe also exposed a wrong instruction in the smoke test's own output: it
+named the Nexora customer as the panel user to delete. The panel account is
+derived from the subscription id, deliberately, so customer identity never
+reaches the panel; the script now prints the prefix the real account has.
+
 ### Found — provisioned users get no configs
 
 With the network fixed, the next live purchase got further than any before:

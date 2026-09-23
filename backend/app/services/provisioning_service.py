@@ -112,6 +112,7 @@ class ProvisioningService:
                     traffic_limit_bytes=int(terms["traffic_limit_bytes"]),
                     expire_at=expire_at,
                     device_limit=int(terms["device_limit"]),
+                    group_ids=panel.group_id_list or None,
                 )
                 config_uris = list(panel_user.configs)
                 if not config_uris:

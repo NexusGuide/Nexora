@@ -7,6 +7,7 @@ never in plaintext columns, never in the repository, and never in the APK.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -45,9 +46,23 @@ class Panel(UUIDMixin, TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # JSON list of panel group ids every new user is placed in. On a
+    # group-based panel this is what grants inbound access; without it a
+    # provisioned user exists but has no link. Not a credential, so plain.
+    default_group_ids: Mapped[str | None] = mapped_column(Text)
+
     servers: Mapped[list[Server]] = relationship(
         back_populates="panel", cascade="all, delete-orphan", lazy="selectin"
     )
+
+    @property
+    def group_id_list(self) -> list[int]:
+        if not self.default_group_ids:
+            return []
+        try:
+            return [int(g) for g in json.loads(self.default_group_ids)]
+        except (ValueError, TypeError):
+            return []
 
     @property
     def has_credentials(self) -> bool:

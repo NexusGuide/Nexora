@@ -49,6 +49,21 @@ class PanelUser:
 
 
 @dataclass(slots=True)
+class PanelGroup:
+    """An access group on a group-based panel.
+
+    Newer PasarGuard does not attach inbounds to users; it attaches them to
+    groups and puts users in groups. A user in no group exists but has no
+    inbound, so the panel generates no link for them.
+    """
+
+    id: int
+    name: str
+    inbound_count: int
+    is_disabled: bool = False
+
+
+@dataclass(slots=True)
 class PanelUsage:
     username: str
     used_bytes: int
@@ -77,8 +92,13 @@ class PanelAdapter(ABC):
         expire_at: datetime | None,
         device_limit: int | None = None,
         inbound_tags: list[str] | None = None,
+        group_ids: list[int] | None = None,
     ) -> PanelUser:
-        """Create a panel user. Must be idempotent for an existing username."""
+        """Create a panel user. Must be idempotent for an existing username.
+
+        ``group_ids`` is required in practice on a group-based panel: without
+        it the user has access to no inbound and receives no config.
+        """
 
     @abstractmethod
     async def get_user(self, username: str) -> PanelUser | None: ...
@@ -97,6 +117,10 @@ class PanelAdapter(ABC):
 
     @abstractmethod
     async def get_usage(self, username: str) -> PanelUsage: ...
+
+    async def list_groups(self) -> list[PanelGroup]:
+        """The panel's access groups. Empty for panels without a group model."""
+        return []
 
     @abstractmethod
     async def get_configs(self, username: str) -> list[str]:

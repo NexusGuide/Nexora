@@ -42,6 +42,7 @@ class FakeAdapter(PanelAdapter):
         self.fail_create = fail_create
         self.users: dict[str, PanelUser] = {}
         self.create_calls = 0
+        self.create_kwargs: dict = {}
         self.disabled: list[str] = []
         self._configs = (
             configs
@@ -59,6 +60,7 @@ class FakeAdapter(PanelAdapter):
         if self.fail_create:
             raise PanelError("Panel is unreachable", code="PANEL_UNREACHABLE")
         self.create_calls += 1
+        self.create_kwargs = kw
         if username not in self.users:
             self.users[username] = PanelUser(
                 username=username,
@@ -382,3 +384,31 @@ async def test_expiry_disables_the_panel_account(session):
 
     assert await service.disable_on_panel(subscription.id) is True
     assert subscription.panel_username in adapter.disabled
+
+
+# --- groups ------------------------------------------------------------------
+async def test_the_panels_default_groups_reach_create_user(session):
+    """On a group-based panel the groups are what grant any inbound at all."""
+    user, plan, panel, _ = await build_world(session)
+    panel.default_group_ids = "[1]"
+    await session.commit()
+    order = await paid_order(session, user, plan)
+
+    adapter = FakeAdapter(None)
+    await ProvisioningService(session, manager=FakeManager(adapter)).provision_order(
+        order.id
+    )
+
+    assert adapter.create_kwargs["group_ids"] == [1]
+
+
+async def test_no_groups_configured_sends_none(session):
+    user, plan, _, _ = await build_world(session)
+    order = await paid_order(session, user, plan)
+
+    adapter = FakeAdapter(None)
+    await ProvisioningService(session, manager=FakeManager(adapter)).provision_order(
+        order.id
+    )
+
+    assert adapter.create_kwargs["group_ids"] is None

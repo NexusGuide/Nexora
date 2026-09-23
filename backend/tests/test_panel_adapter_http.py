@@ -23,8 +23,31 @@ GB = 1024**3
 class FakePanel:
     """A minimal PasarGuard-shaped API, with switches for failure modes."""
 
-    def __init__(self, *, auth_ok: bool = True, expire_token_once: bool = False):
+    def __init__(
+        self,
+        *,
+        auth_ok: bool = True,
+        expire_token_once: bool = False,
+        group_based: bool = False,
+        groups_as_object: bool = False,
+    ):
         self.users: dict[str, dict] = {}
+        # Group mode mirrors the real panel the first live purchase ran
+        # against: a user placed in no group exists, but has no link.
+        self.group_based = group_based
+        self.groups_as_object = groups_as_object
+        self.groups = [
+            {"id": 1, "name": "free", "inbound_tags": ["vless-ws"], "is_disabled": False},
+            {
+                "id": 2,
+                "name": "TEST",
+                "inbound_tags": ["vless-grpc"],
+                "is_disabled": False,
+            },
+            {"id": 3, "name": "old", "inbound_tags": ["x"], "is_disabled": True},
+            {"id": 4, "name": "empty", "inbound_tags": [], "is_disabled": False},
+        ]
+        self.last_create_body: dict | None = None
         self.auth_ok = auth_ok
         self.expire_token_once = expire_token_once
         self.token_used = False
@@ -44,13 +67,21 @@ class FakePanel:
             self.token_used = True
             return httpx.Response(401, json={"detail": "token expired"})
 
+        if path == "/api/groups":
+            if not self.group_based:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            body = {"groups": self.groups} if self.groups_as_object else self.groups
+            return httpx.Response(200, json=body)
+
         if path == "/api/users":
             return httpx.Response(200, json={"users": list(self.users.values())})
 
         if path == "/api/user" and request.method == "POST":
             self.create_calls += 1
             body = json.loads(request.content)
+            self.last_create_body = body
             username = body["username"]
+            granted = not self.group_based or bool(body.get("group_ids"))
             self.users[username] = {
                 "username": username,
                 "status": "active",
@@ -58,10 +89,13 @@ class FakePanel:
                 "used_traffic": 0,
                 "expire": body.get("expire", 0),
                 "subscription_url": f"https://panel.example/sub/{username}",
+                "group_ids": body.get("group_ids", []),
                 "links": [
                     f"vless://uuid-1@de1.example.com:443?type=ws#{username}-DE",
                     f"vless://uuid-2@nl1.example.com:443?type=grpc#{username}-NL",
-                ],
+                ]
+                if granted
+                else [],
             }
             return httpx.Response(200, json=self.users[username])
 
@@ -231,3 +265,53 @@ async def test_unreachable_panel_gives_a_clean_error(session):
         with pytest.raises(PanelError) as exc:
             await adapter.test_connection()
     assert exc.value.code == "PANEL_UNREACHABLE"
+
+
+# --- group-based panels -------------------------------------------------------
+# The first live purchase created a user with no group on a group-based panel:
+# the account existed and was active, and had no link. These pin both halves.
+
+
+async def test_a_user_created_without_a_group_gets_no_link(session):
+    """The fake reproduces the real failure, so the fix below is meaningful."""
+    panel = FakePanel(group_based=True)
+    async with make_adapter(panel) as adapter:
+        user = await adapter.create_user(
+            "nx_nogroup", traffic_limit_bytes=GB, expire_at=None
+        )
+    assert list(user.configs) == []
+
+
+async def test_group_ids_are_sent_and_the_user_gets_links(session):
+    panel = FakePanel(group_based=True)
+    async with make_adapter(panel) as adapter:
+        user = await adapter.create_user(
+            "nx_grouped", traffic_limit_bytes=GB, expire_at=None, group_ids=[1]
+        )
+    assert panel.last_create_body["group_ids"] == [1]
+    assert len(list(user.configs)) == 2
+
+
+async def test_no_group_ids_key_when_none_are_configured(session):
+    """A Marzban-style panel must not receive a field it does not know."""
+    panel = FakePanel()
+    async with make_adapter(panel) as adapter:
+        await adapter.create_user("nx_plain", traffic_limit_bytes=GB, expire_at=None)
+    assert "group_ids" not in panel.last_create_body
+
+
+@pytest.mark.parametrize("as_object", [False, True])
+async def test_list_groups_accepts_both_response_shapes(session, as_object):
+    panel = FakePanel(group_based=True, groups_as_object=as_object)
+    async with make_adapter(panel) as adapter:
+        groups = await adapter.list_groups()
+    by_id = {g.id: g for g in groups}
+    assert by_id[1].name == "free" and by_id[1].inbound_count == 1
+    assert by_id[3].is_disabled is True
+    assert by_id[4].inbound_count == 0
+
+
+async def test_list_groups_is_empty_on_a_panel_without_groups(session):
+    panel = FakePanel(group_based=False)
+    async with make_adapter(panel) as adapter:
+        assert await adapter.list_groups() == []

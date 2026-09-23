@@ -118,6 +118,33 @@ If a call fails, correct `ENDPOINTS` or `FIELDS` in `app/panels/pasarguard.py`.
 Do not work around a mismatch in calling code — that is how the abstraction
 starts leaking panel-specific behaviour.
 
+## Group-based panels
+
+Newer PasarGuard does not attach inbounds to users. It attaches them to
+**groups**, and a user's access is whatever groups they are in. A user created
+in no group exists, is active, and receives **no config** — which is exactly
+what the first live purchase against a real panel produced.
+
+Each panel therefore carries the groups new users are placed in:
+
+```bash
+bash scripts/panel-groups.sh      # lists the panel's groups live, stores your choice
+```
+
+or directly:
+
+```
+GET /api/v1/admin/panels/{id}/groups     the panel's groups, read live
+PUT /api/v1/admin/panels/{id}/groups     {"group_ids": [1]}
+```
+
+The choice is checked against the panel before it is stored: an id that does
+not exist, a disabled group, or a group granting no inbound is refused, since
+any of them would let every purchase succeed and deliver nothing.
+
+On a panel without a group model the list is empty, no `group_ids` field is
+sent, and nothing changes.
+
 ## Unimplemented panels
 
 X-UI, Marzban and Custom are registered in `_UNIMPLEMENTED` and raise

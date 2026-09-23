@@ -23,12 +23,19 @@ from typing import Any
 import httpx
 
 from app.core.exceptions import PanelError
-from app.panels.base import PanelAdapter, PanelCredentials, PanelUsage, PanelUser
+from app.panels.base import (
+    PanelAdapter,
+    PanelCredentials,
+    PanelGroup,
+    PanelUsage,
+    PanelUser,
+)
 
 logger = logging.getLogger(__name__)
 
 ENDPOINTS = {
     "token": "/api/admin/token",
+    "groups": "/api/groups",
     "user": "/api/user/{username}",
     "users": "/api/users",
     "user_create": "/api/user",
@@ -172,6 +179,7 @@ class PasarGuardAdapter(PanelAdapter):
         expire_at: datetime | None,
         device_limit: int | None = None,
         inbound_tags: list[str] | None = None,
+        group_ids: list[int] | None = None,
     ) -> PanelUser:
         existing = await self.get_user(username)
         if existing is not None:
@@ -188,6 +196,12 @@ class PasarGuardAdapter(PanelAdapter):
         }
         if inbound_tags:
             body["inbounds"] = {"vless": inbound_tags}
+        if group_ids:
+            # PasarGuard grants inbound access through groups. Omitting this
+            # on a group-based panel creates a user who exists, is active,
+            # and has no link — which is exactly what the first live purchase
+            # produced.
+            body["group_ids"] = list(group_ids)
 
         response = await self._request("POST", ENDPOINTS["user_create"], json=body)
         if response.status_code == 409:
@@ -200,6 +214,34 @@ class PasarGuardAdapter(PanelAdapter):
                 code="PANEL_CREATE_FAILED",
             )
         return self._to_panel_user(response.json())
+
+    async def list_groups(self) -> list[PanelGroup]:
+        """Groups as the panel reports them, shape verified against a live panel.
+
+        The endpoint has been seen returning both a bare list and an object
+        with a ``groups`` key across versions, so both are accepted.
+        """
+        response = await self._request("GET", ENDPOINTS["groups"])
+        if response.status_code == 404:
+            # A panel without the group model: nothing to choose from.
+            return []
+        if response.status_code >= 400:
+            raise PanelError(
+                f"Panel returned HTTP {response.status_code} for list_groups",
+                code="PANEL_READ_FAILED",
+            )
+        body = response.json()
+        items = body.get("groups", []) if isinstance(body, dict) else body
+        return [
+            PanelGroup(
+                id=int(g["id"]),
+                name=str(g.get("name", "")),
+                inbound_count=len(g.get("inbound_tags") or []),
+                is_disabled=bool(g.get("is_disabled", False)),
+            )
+            for g in items or []
+            if isinstance(g, dict) and "id" in g
+        ]
 
     async def get_user(self, username: str) -> PanelUser | None:
         response = await self._request("GET", ENDPOINTS["user"].format(username=username))
