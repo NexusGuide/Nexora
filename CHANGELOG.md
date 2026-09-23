@@ -37,6 +37,30 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — deploy.sh aborted reading its own .env
+
+The first real deployment got as far as writing `.env` and then died with
+`./.env: line 32: syntax error near unexpected token 'newline'`.
+
+The script read `.env` with `. ./.env`. But `.env` legitimately contains
+`<angle-bracket>` placeholders for settings nobody has configured yet, and to
+the shell `<` is a redirect — so sourcing aborts on the first one. Eight lines
+in `.env.example` have this shape, so this was never going to work; it only
+surfaced now because nothing had run the script end to end before.
+
+- Values are now read with `grep`/`cut`, taking the **last** occurrence so the
+  block the script appends wins over the template's placeholder, and stripping
+  inline `# comments`. Compose reads the same file with its own parser and was
+  never affected.
+- An optional setting still reading `<something>` is an unfilled blank, not a
+  value, so `PAYMENT_API_KEY`, `SMTP_*` and `SENTRY_DSN` are emptied rather
+  than left holding literal placeholder text.
+- **Ports 80 and 443 are now checked before any work**, printing what holds
+  them. On a host already running a panel this otherwise surfaced halfway
+  through as an unexplained container failure — or took the other service down.
+- A missing email argument now explains itself with usage and an example,
+  and an address that is not one is rejected before Docker is touched.
+
 ### Added — one-command deployment
 
 Deploying meant following a page of manual steps, and one of them could not

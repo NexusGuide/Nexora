@@ -23,10 +23,25 @@ step() { printf '\n\033[0;36m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '\033[0;32m  ok\033[0m  %s\n' "$*"; }
 warn() { printf '\033[0;33mwarn\033[0m  %s\n' "$*"; }
 
-[ -n "$DOMAIN" ] || die "Usage: $0 <domain> <email>
+usage="Usage: $0 <domain> <email>
+
   <domain>  the API hostname, e.g. api.example.com
-  <email>   where Let's Encrypt sends expiry warnings"
-[ -n "$EMAIL" ] || die "An email address is required for the certificate."
+  <email>   a real address; Let's Encrypt sends certificate expiry warnings there
+
+Example:
+  $0 api.example.com you@example.com
+
+Both arguments are required — pass them literally, not as placeholders."
+
+[ -n "$DOMAIN" ] || die "No domain given.
+$usage"
+[ -n "$EMAIL" ] || die "No email given — Let's Encrypt requires one.
+$usage"
+case "$EMAIL" in
+    *@*.*) ;;
+    *) die "'$EMAIL' does not look like an email address.
+$usage" ;;
+esac
 
 # --- 1. Docker ---------------------------------------------------------------
 step "Checking Docker"
@@ -38,7 +53,30 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is missing. Ins
 docker info >/dev/null 2>&1 || die "The Docker daemon is not running (or this user cannot reach it). Try: sudo systemctl start docker"
 ok "$(docker --version)"
 
-# --- 2. DNS ------------------------------------------------------------------
+# --- 2. Ports ----------------------------------------------------------------
+# nginx needs 80 and 443. On a host that already runs a panel or another web
+# server they are taken, and the failure would otherwise surface halfway
+# through as an unexplained container crash — or, worse, take the other
+# service down.
+step "Checking that ports 80 and 443 are free"
+busy=""
+for p in 80 443; do
+    if ss -tlnH "sport = :$p" 2>/dev/null | grep -q . ; then
+        busy="$busy $p"
+    fi
+done
+if [ -n "$busy" ]; then
+    echo
+    ss -tlnp '( sport = :80 or sport = :443 )' 2>/dev/null || true
+    echo
+    die "Port(s)$busy are already in use by the process shown above.
+Deploying now would fail, or take that service offline.
+Either stop it, or put Nexora behind it as a reverse-proxy target instead of
+running this script — see docs/deployment.md."
+fi
+ok "80 and 443 are free"
+
+# --- 3. DNS ------------------------------------------------------------------
 # Checked before anything is built, because a wrong A record fails at the very
 # last step otherwise, after several minutes of work.
 step "Checking that $DOMAIN points here"
@@ -54,7 +92,7 @@ else
     ok "$DOMAIN -> $resolved"
 fi
 
-# --- 3. Configuration --------------------------------------------------------
+# --- 4. Configuration --------------------------------------------------------
 step "Configuration"
 if [ -f .env ]; then
     ok ".env exists — leaving it untouched"
@@ -86,9 +124,29 @@ else
     warn "Back up ENCRYPTION_KEY from .env somewhere off this server. Lose it and every stored panel credential is unrecoverable."
 fi
 
-set -a; . ./.env; set +a
-[ "${NEXUS_DOMAIN:-}" = "$DOMAIN" ] || warn "NEXUS_DOMAIN in .env is '${NEXUS_DOMAIN:-}', not '$DOMAIN'. Using the .env value."
-DOMAIN="${NEXUS_DOMAIN:-$DOMAIN}"
+# Read values out of .env WITHOUT sourcing it. .env legitimately contains
+# <angle-bracket> placeholders for settings nobody has configured yet, and to
+# the shell "<" is a redirect, so `. ./.env` aborts on the first one. Compose
+# reads the file with its own parser and is unaffected.
+env_get() {
+    grep -E "^$1=" .env 2>/dev/null | tail -n1 | cut -d= -f2- \
+        | sed 's/[[:space:]]\+#.*$//; s/[[:space:]]*$//'
+}
+
+# An optional setting left at "<something>" is not a value, it is an unfilled
+# blank. Blank it out so nothing downstream treats the placeholder as real.
+if grep -qE '^(PAYMENT_API_KEY|SMTP_PASSWORD|SMTP_USER|SMTP_HOST|SENTRY_DSN)=<[^>]*>' .env; then
+    sed -i -E 's/^(PAYMENT_API_KEY|SMTP_PASSWORD|SMTP_USER|SMTP_HOST|SENTRY_DSN)=<[^>]*>/\1=/' .env
+    ok "cleared unfilled optional placeholders in .env"
+fi
+
+env_domain="$(env_get NEXUS_DOMAIN)"
+case "$env_domain" in
+    ""|"<"*)  ;;                       # absent or still a placeholder
+    "$DOMAIN") ;;                      # agrees with the argument
+    *) warn "NEXUS_DOMAIN in .env is '$env_domain', not '$DOMAIN'. Using the .env value."
+       DOMAIN="$env_domain" ;;
+esac
 
 step "Rendering the nginx configuration for $DOMAIN"
 # sed rather than envsubst: envsubst ships in gettext-base, which a minimal
@@ -101,7 +159,7 @@ grep -q '${NEXUS_DOMAIN}' infrastructure/nginx/nginx.conf \
     && die "The nginx template still contains an unsubstituted placeholder."
 ok "infrastructure/nginx/nginx.conf"
 
-# --- 4. Application ----------------------------------------------------------
+# --- 5. Application ----------------------------------------------------------
 step "Building and starting the datastores"
 docker compose up -d postgres redis
 docker compose run --rm migrate
@@ -110,7 +168,7 @@ ok "migrations applied"
 step "Starting the API, worker and scheduler"
 docker compose up -d --build api worker scheduler
 
-# --- 5. Certificate ----------------------------------------------------------
+# --- 6. Certificate ----------------------------------------------------------
 # The bootstrap problem: nginx will not start without a certificate, and
 # certbot cannot get one without nginx serving the ACME challenge. Solved by
 # starting nginx on a throwaway self-signed certificate, then replacing it.
@@ -148,7 +206,7 @@ step "Starting nginx"
 docker compose --profile full up -d nginx
 docker compose exec nginx nginx -s reload >/dev/null 2>&1 || docker compose restart nginx
 
-# --- 6. Renewal --------------------------------------------------------------
+# --- 7. Renewal --------------------------------------------------------------
 # Renewal uses the webroot nginx is already serving, so nothing stops.
 step "Installing the renewal timer"
 cron_line="0 3 * * * cd $ROOT && docker compose run --rm certbot renew --webroot -w /var/www/certbot --quiet && docker compose exec -T nginx nginx -s reload"
@@ -166,7 +224,7 @@ else
     ok "database backup runs daily at 02:30"
 fi
 
-# --- 7. Verify ---------------------------------------------------------------
+# --- 8. Verify ---------------------------------------------------------------
 # Checked from outside over the real hostname, because that is the only proof
 # that DNS, TLS, nginx and the API all agree.
 step "Verifying"
