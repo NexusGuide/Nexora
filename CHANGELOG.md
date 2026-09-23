@@ -37,6 +37,24 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Found — provisioned users get no configs
+
+With the network fixed, the next live purchase got further than any before:
+the panel user was created and the subscription went ACTIVE, which confirms
+`create_user` agrees with a real panel. But no config came back, because the
+adapter creates every user with `"proxies": {}` and `"inbounds": {}` — an
+account with access to nothing, so the panel has no link to generate.
+
+Which fix is right depends on the panel's access model: Marzban-style panels
+attach inbounds to the user; newer PasarGuard assigns them to *groups* and
+puts users in groups. Guessing would cost another failed purchase, and the
+panel's OpenAPI document is (sensibly) disabled.
+
+`python -m app.panels.probe [username]` asks the panel instead. It runs in the
+api container with the credentials already stored, and prints structure only —
+field names, types, counts, status codes, group names — never a value, so its
+output can be shared.
+
 ### Fixed — the worker could not reach any panel
 
 The first live purchase paid, queued provisioning, and then failed five times
