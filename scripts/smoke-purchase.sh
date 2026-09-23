@@ -33,6 +33,9 @@ fail() { red "$1"; shift; echo "$*" | head -c 500; echo; exit 1; }
 
 STAMP=$(date +%s)
 CUST="smoketest_$STAMP"
+# The customer's address lives on the deployment's own domain. ".invalid" and
+# similar reserved names are rejected by the email validator, correctly.
+MAIL_DOMAIN="${API#https://}"; MAIL_DOMAIN="${MAIL_DOMAIN%%/*}"
 
 echo
 dim "API: $API"
@@ -61,30 +64,61 @@ PANEL_NAME=$(echo "$PANELS" | jq_ "d['data'][0]['name']")
 green "Using panel '$PANEL_NAME' ($PANEL_ID)"
 
 step "Server"
-dim "The address subscribers actually connect to — the node this panel fronts."
-printf 'Server host (e.g. de1.example.com): '; read -r SHOST
-printf 'Server port [443]: '; read -r SPORT
-SPORT="${SPORT:-443}"
+# Reuse a server already registered against this panel. Creating one per run
+# would leave a trail of duplicate, healthy server rows that provisioning is
+# free to pick for real customers.
+SERVERS=$(curl -sS "$API/api/v1/admin/servers" "${AUTH[@]}")
+SERVER_ID=$(echo "$SERVERS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+m=[s for s in d.get('data',[]) if s.get('panel_id')==sys.argv[1]]
+print(m[0]['id'] if m else '')" "$PANEL_ID" 2>/dev/null)
 
-SERVER=$(curl -sS -X POST "$API/api/v1/admin/servers" "${AUTH[@]}" \
-    -d "$(python3 -c '
+if [ -n "$SERVER_ID" ]; then
+    green "Reusing server $SERVER_ID"
+else
+    dim "The address subscribers actually connect to — the node this panel fronts."
+    printf 'Server host (e.g. de1.example.com): '; read -r SHOST
+    printf 'Server port [443]: '; read -r SPORT
+    SPORT="${SPORT:-443}"
+    SERVER=$(curl -sS -X POST "$API/api/v1/admin/servers" "${AUTH[@]}" \
+        -d "$(python3 -c '
 import json,sys
-print(json.dumps({"panel_id":sys.argv[1],"name":"smoke-"+sys.argv[4],
+print(json.dumps({"panel_id":sys.argv[1],"name":"node-"+sys.argv[2],
                   "host":sys.argv[2],"port":int(sys.argv[3])}))' \
-        "$PANEL_ID" "$SHOST" "$SPORT" "$STAMP")")
-SERVER_ID=$(echo "$SERVER" | jq_ "d['data']['id']")
-[ -n "$SERVER_ID" ] || fail "Could not create the server." "$SERVER"
-green "Server $SERVER_ID"
+            "$PANEL_ID" "$SHOST" "$SPORT")")
+    SERVER_ID=$(echo "$SERVER" | jq_ "d['data']['id']")
+    [ -n "$SERVER_ID" ] || fail "Could not create the server." "$SERVER"
+    green "Server $SERVER_ID"
+fi
 
 # --- a plan to sell ----------------------------------------------------------
+# The smoke plan is free, and ordering requires it to be ACTIVE — which also
+# puts it in the public store. It must not outlive the run, so it is archived
+# on exit however the script ends, and any left over from an earlier run that
+# died before cleaning up is archived first.
+archive_plan() {
+    curl -sS -X PATCH "$API/api/v1/admin/plans/$1" "${AUTH[@]}" \
+        -d '{"status":"ARCHIVED"}' >/dev/null 2>&1
+}
+
 step "Plan"
+LEFTOVER=$(curl -sS "$API/api/v1/admin/plans" "${AUTH[@]}" | python3 -c "
+import sys,json
+for p in json.load(sys.stdin).get('data',[]):
+    if p['name'].startswith('Smoke test') and p['status']=='ACTIVE':
+        print(p['id'])" 2>/dev/null)
+for id in $LEFTOVER; do
+    archive_plan "$id" && dim "Archived a smoke plan left by an earlier run: $id"
+done
 PLAN=$(curl -sS -X POST "$API/api/v1/admin/plans" "${AUTH[@]}" \
     -d "$(pyjson '{"name":"Smoke test 1GB / 1 day","duration_days":1,
                    "traffic_limit_gb":1,"device_limit":1,"price":"0.00",
                    "currency":"IRT","sort_order":999}')")
 PLAN_ID=$(echo "$PLAN" | jq_ "d['data']['id']")
 [ -n "$PLAN_ID" ] || fail "Could not create the plan." "$PLAN"
-green "Plan $PLAN_ID"
+trap 'archive_plan "$PLAN_ID"' EXIT
+green "Plan $PLAN_ID (archived automatically when this script exits)"
 
 # --- a customer --------------------------------------------------------------
 # A throwaway account, so the test never runs as the owner and therefore
@@ -94,14 +128,14 @@ CPASS="Sm0ke-$STAMP-Test"
 REG=$(curl -sS -X POST "$API/api/v1/auth/register" -H 'Content-Type: application/json' \
     -d "$(python3 -c '
 import json,sys
-print(json.dumps({"username":sys.argv[1],"email":sys.argv[1]+"@smoke.invalid",
-                  "password":sys.argv[2]}))' "$CUST" "$CPASS")")
+print(json.dumps({"username":sys.argv[1],"email":sys.argv[1]+"@"+sys.argv[3],
+                  "password":sys.argv[2]}))' "$CUST" "$CPASS" "$MAIL_DOMAIN")")
 echo "$REG" | grep -q '"success":true' || fail "Could not register the test customer." "$REG"
 
 CLOGIN=$(curl -sS -X POST "$API/api/v1/auth/login" -H 'Content-Type: application/json' \
     -d "$(python3 -c '
 import json,sys
-print(json.dumps({"identifier":sys.argv[1],"password":sys.argv[2]}))' "$CUST" "$CPASS")")
+print(json.dumps({"identifier":sys.argv[1],"password":sys.argv[2]}))' "$CUST" "$CPASS" "$MAIL_DOMAIN")")
 CTOKEN=$(echo "$CLOGIN" | jq_ "d['data']['tokens']['access_token']")
 [ -n "$CTOKEN" ] || fail "Test customer could not sign in." "$CLOGIN"
 CAUTH=(-H "Authorization: Bearer $CTOKEN" -H 'Content-Type: application/json')
@@ -189,7 +223,5 @@ else
 fi
 
 echo
-dim "Clean up when you are done:"
-dim "  panel user   $CUST   (delete it in PasarGuard)"
-dim "  plan         $PLAN_ID"
-dim "  server       $SERVER_ID"
+dim "The smoke plan has been archived. One thing is left for you:"
+dim "  delete the panel user $CUST in PasarGuard"

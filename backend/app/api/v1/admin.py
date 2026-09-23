@@ -424,7 +424,8 @@ async def update_plan(
 
     Each order carries its own snapshot of the plan taken at purchase time, so
     raising a price or retiring a tier leaves live subscriptions untouched.
-    Retire a plan by setting `status` to INACTIVE rather than deleting it —
+    Retire a plan by setting `status` to ARCHIVED (or HIDDEN to pull it from
+    the store temporarily) rather than deleting it —
     orders reference it, and deleting would orphan their history.
     """
     plan = await session.get(Plan, plan_id)

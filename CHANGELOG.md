@@ -51,7 +51,7 @@ close in phase 3, with plans overlooked.
   what a GB is.
 - Finance may set pricing alongside the operators who run the fleet; Support
   may not.
-- A plan is retired by setting its status, never deleted: orders reference it,
+- A plan is retired by setting its status to `ARCHIVED`, never deleted: orders reference it,
   and each order already carries its own snapshot, so editing a plan cannot
   retroactively change what an existing customer bought.
 
@@ -65,6 +65,15 @@ against the real database rather than a test double.
 It prints only each config's protocol, name and host. `config_data` is the
 connection URI and carries the subscriber's credential, so the run can be
 shared without leaking one.
+
+Its first live run failed in two instructive ways. The throwaway customer's
+email used `.invalid`, a reserved name the email validator correctly refuses.
+And by then it had already created a **free plan, ACTIVE and therefore listed
+in the public store** — ordering requires ACTIVE, so the plan cannot simply be
+created hidden. The script now archives its plan on exit however it ends,
+archives any smoke plan an earlier failed run left behind, and reuses an
+existing server rather than leaving duplicate healthy server rows that
+provisioning would be free to pick for real customers.
 
 ### Verified — the PasarGuard adapter reaches a live panel
 
