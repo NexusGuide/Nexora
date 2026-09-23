@@ -37,6 +37,23 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Added — `scripts/register-panel.sh`
+
+Registering a panel meant a hand-written `curl` with the panel's admin
+password inside it. That is wrong twice over: an argument lands in the shell
+history and in `ps` output for every user on the box, and a password
+containing a quote, a backslash or a `$` breaks the JSON or gets mangled by
+the shell before it is sent.
+
+The script prompts for credentials instead of taking them as arguments, builds
+the request body with `json.dumps` so no password can break it, registers the
+panel and runs the adapter test — clearing the screen first, so the result can
+be shared without the credentials above it.
+
+It also exists for a practical reason: pasting a multi-line block that contains
+`read` does not work. The shell consumes the block's own later lines as answers
+to the earlier prompts. A script file separates the code from the input.
+
 ### Added — there was no way to create the first administrator
 
 `ADMIN_BOOTSTRAP_SECRET` was required at boot, validated for entropy and
