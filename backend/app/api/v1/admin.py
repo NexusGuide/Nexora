@@ -19,8 +19,8 @@ from sqlalchemy import select
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
-from app.models.billing import Plan
-from app.models.enums import AdminRole
+from app.models.billing import Order, Plan
+from app.models.enums import AdminRole, OrderStatus
 from app.models.panel import Panel, Server
 from app.models.user import User
 from app.schemas.admin import BootstrapRequest
@@ -271,6 +271,55 @@ async def confirm_manual_payment(
         },
         request,
     )
+
+
+@router.post(
+    "/orders/{order_id}/reprovision",
+    summary="Re-queue provisioning for a paid order that never got its service",
+)
+async def reprovision_order(
+    order_id: str,
+    request: Request,
+    session: SessionDep,
+    admin: PanelAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Recover a customer who paid and received nothing.
+
+    Provisioning is retried with backoff, and after the last attempt the job
+    goes to the dead-letter stream. If the failure happened before the panel
+    account was created, the subscription row was rolled back with it — so
+    the order is PAID, there is no subscription, and nothing else can recover
+    it: `confirm-payment` only queues on the transition to paid, and
+    `/subscriptions/{id}/reprovision` needs a subscription that does not exist.
+
+    Safe to call on an order that already succeeded: provisioning is
+    idempotent and reuses the existing subscription and panel username rather
+    than creating a second account.
+    """
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
+    if order.status is not OrderStatus.PAID:
+        raise ConflictError("Only a paid order can be provisioned", code="ORDER_NOT_PAID")
+
+    await PanelService(session).record_audit(
+        actor_id=admin.id,
+        action="order.reprovision",
+        entity="order",
+        entity_id=order_id,
+        ip_address=ip,
+        metadata={"had_subscription": order.subscription_id is not None},
+    )
+    await session.commit()
+
+    queue = build_queue(get_settings().redis_url)
+    try:
+        job_id = await queue.enqueue(CREATE_PANEL_USER, {"order_id": order_id})
+    finally:
+        await queue.close()
+
+    return _envelope({"order_id": order_id, "queued": True, "job_id": job_id}, request)
 
 
 # ----------------------------------------------------------------- bootstrap

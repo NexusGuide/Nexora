@@ -108,7 +108,11 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-    networks: [internal]
+    # `edge` as well as `internal`: calling panels on the Internet is this
+    # service's whole job, and `internal` deliberately has no route out. With
+    # only `internal`, every provisioning run failed while the panel test —
+    # which runs in the api container — passed, and nothing pointed at why.
+    networks: [internal, edge]
 
   scheduler:
     build:
@@ -120,7 +124,10 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-    networks: [internal]
+    # Needs egress for the panel health check. Without it the check fails
+    # every time and marks a perfectly healthy panel UNREACHABLE, which then
+    # removes every server behind it from provisioning.
+    networks: [internal, edge]
 
   nginx:
     image: nginx:1.27-alpine

@@ -63,6 +63,15 @@ PANEL_NAME=$(echo "$PANELS" | jq_ "d['data'][0]['name']")
 [ -n "$PANEL_ID" ] || fail "No panel registered." "Run scripts/register-panel.sh first."
 green "Using panel '$PANEL_NAME' ($PANEL_ID)"
 
+# Checked before anything is bought. A panel that cannot be reached here would
+# otherwise surface only after a paid order had already failed to provision.
+# The test also restores the panel to ACTIVE if an earlier health check marked
+# it UNREACHABLE, which removes every server behind it from provisioning.
+PTEST=$(curl -sS -X POST "$API/api/v1/admin/panels/$PANEL_ID/test" "${AUTH[@]}")
+echo "$PTEST" | grep -q '"reachable":true' \
+    || fail "The panel is not reachable from the API — fix that before buying." "$PTEST"
+green "Panel reachable"
+
 step "Server"
 # Reuse a server already registered against this panel. Creating one per run
 # would leave a trail of duplicate, healthy server rows that provisioning is
@@ -189,6 +198,11 @@ if [ "$SUB_STATUS" != "ACTIVE" ]; then
     echo
     dim "The worker's log will say why:"
     dim "  docker compose logs --tail 40 worker"
+    echo
+    dim "Once the cause is fixed, this paid order can be recovered without"
+    dim "buying again — the worker retries on its own, and this forces it:"
+    dim "  curl -sS -X POST $API/api/v1/admin/orders/$ORDER_ID/reprovision \\"
+    dim "    -H 'Authorization: Bearer <admin token>'"
     exit 1
 fi
 green "Subscription $SUB_ID is ACTIVE"

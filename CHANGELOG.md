@@ -37,6 +37,43 @@ change it without a deprecation period.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
 
+### Fixed — the worker could not reach any panel
+
+The first live purchase paid, queued provisioning, and then failed five times
+with *"No server is currently available for this plan"* — while the panel's
+connection test had passed minutes earlier.
+
+The cause was in `docker-compose.yml`. The `internal` network is deliberately
+`internal: true`, so the database and Redis have no route to the Internet. But
+the worker and scheduler were placed on **only** that network — and calling
+panels on the Internet is the worker's entire job. The connection test passed
+because it runs in the API container, which is also on `edge`. The scheduler's
+health check, unable to reach anything, then marked the healthy panel
+`UNREACHABLE`, and that removed every server behind it from provisioning. The
+error named the last link in that chain, not the first.
+
+- `worker` and `scheduler` join `edge`. Postgres and Redis stay on `internal`
+  alone; that property is unchanged.
+- `scripts/smoke-purchase.sh` now tests the panel **before** buying, so a
+  reachability problem stops the run instead of stranding a paid order, and
+  the test restores a panel a failed health check wrongly marked unreachable.
+
+### Added — recovering a customer who paid and received nothing
+
+The same failure exposed a gap with no workaround. Provisioning dead-letters
+after its last retry, and because it failed before the panel account existed,
+the subscription row was rolled back with it. The order was PAID with no
+subscription, and nothing could recover it: `confirm-payment` only queues on
+the transition to paid, and `/subscriptions/{id}/reprovision` needs a
+subscription that does not exist. For a real customer that is "paid, got
+nothing, and support cannot fix it without editing the database".
+
+`POST /api/v1/admin/orders/{id}/reprovision` re-queues provisioning for a paid
+order. It refuses unpaid orders, is audit-logged, and is safe to call on an
+order that already succeeded, because provisioning is idempotent and reuses the
+existing subscription and panel username. Four tests, including that a
+customer cannot call it.
+
 ### Added — plan management, and an end-to-end purchase test
 
 **There was no way to create a plan.** Panels and servers had admin endpoints;
