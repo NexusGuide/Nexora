@@ -77,14 +77,24 @@ broken session is worse than a missing one.
 
 ## Device identity
 
-`DeviceIdentity` generates a random UUID on first run and stores it encrypted.
+`DeviceIdentity` sends the backend a SHA-256 of `ANDROID_ID` with an
+app-specific prefix. On Android 8+ `ANDROID_ID` is scoped to the app's signing
+key, the device and the user, so it is stable across an uninstall and
+reinstall, differs in every other app, and resets with a factory reset. The
+hash keeps even the app-scoped value off the server.
 
-Deliberately **not** `ANDROID_ID`, IMEI or the advertising ID: those are
-restricted, shared across apps, or survive uninstall — tracking identifiers,
-where all this needs is "is this the same installation as last time".
+It used to be a random UUID made on first run. That reset on every reinstall,
+and a customer on a one-device plan was then locked out by their own phone —
+which is exactly what happened on the first real install.
 
-It resets on reinstall, which costs the user one device slot until they revoke
-the stale entry. That is the right trade against a permanent hardware id.
+Stability depends on the signing key staying the same: a build signed with a
+different key sees a different `ANDROID_ID`. That is one more reason CI signs
+with a fixed debug key (see Building). IMEI, serials and the advertising ID are
+not used. Where `ANDROID_ID` is missing, a random UUID in encrypted storage is
+the fallback.
+
+If a device is still counted twice — a factory reset, a new phone — the
+device-limit dialog offers to sign the old entry out in favour of this one.
 
 ## Error handling
 

@@ -9,6 +9,16 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Changed — reinstalling no longer makes a phone a new device
+
+- The device id is now a SHA-256 of `ANDROID_ID` with an app-specific prefix,
+  instead of a random UUID made on first run. On Android 8+ `ANDROID_ID` is
+  scoped to the app's signing key, the device and the user, so it survives an
+  uninstall and reinstall; the hash keeps even that app-scoped value off the
+  server. A random UUID remains the fallback where `ANDROID_ID` is missing.
+  With the fixed CI signing key, uninstalling and reinstalling the app on the
+  same phone now signs back in to the same device slot.
+
 ### Fixed — locked out by your own phone
 
 - **Every CI build had a different signing key.** Runners start without a
