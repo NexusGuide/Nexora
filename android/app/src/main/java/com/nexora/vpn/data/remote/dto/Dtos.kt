@@ -179,3 +179,81 @@ data class QueuedDto(
     val queued: Boolean = false,
     @SerialName("job_id") val jobId: String? = null,
 )
+
+// --- wallet -----------------------------------------------------------------
+
+@Serializable
+data class WalletTxDto(
+    val id: String,
+    val kind: String = "",
+    // Decimal strings, like every amount: see PlanDto.price.
+    val amount: String = "0",
+    @SerialName("balance_after") val balanceAfter: String = "0",
+    val currency: String = "IRT",
+    @SerialName("order_id") val orderId: String? = null,
+    @SerialName("topup_id") val topupId: String? = null,
+    val note: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class WalletDto(
+    val balance: String = "0",
+    val currency: String = "IRT",
+    @SerialName("pending_topups") val pendingTopups: Int = 0,
+    val transactions: List<WalletTxDto> = emptyList(),
+)
+
+@Serializable
+data class CardMethodDto(
+    val number: String,
+    val holder: String = "",
+    val bank: String = "",
+    val instructions: String = "",
+)
+
+@Serializable
+data class CryptoWalletDto(
+    val network: String,
+    val asset: String = "USDT",
+    val address: String,
+    val rate: String = "0",
+)
+
+@Serializable
+data class PaymentMethodsDto(
+    val currency: String = "IRT",
+    @SerialName("min_topup") val minTopup: String = "0",
+    @SerialName("max_topup") val maxTopup: String = "0",
+    val card: CardMethodDto? = null,
+    val crypto: List<CryptoWalletDto> = emptyList(),
+    @SerialName("crypto_instructions") val cryptoInstructions: String = "",
+)
+
+@Serializable
+data class TopUpCreateDto(
+    val method: String,
+    val amount: String,
+    val reference: String,
+    @SerialName("payer_note") val payerNote: String? = null,
+    val network: String? = null,
+    val asset: String? = null,
+    @SerialName("order_id") val orderId: String? = null,
+)
+
+@Serializable
+data class TopUpDto(
+    val id: String,
+    val method: String = "CARD",
+    val status: String = "PENDING",
+    val amount: String = "0",
+    val currency: String = "IRT",
+    val reference: String = "",
+    val network: String? = null,
+    val asset: String? = null,
+    @SerialName("crypto_amount") val cryptoAmount: String? = null,
+    @SerialName("order_id") val orderId: String? = null,
+    @SerialName("credited_amount") val creditedAmount: String? = null,
+    @SerialName("reject_reason") val rejectReason: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)

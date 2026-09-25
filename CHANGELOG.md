@@ -9,6 +9,24 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — wallet and payments
+
+- **Wallet**: every account has a balance and a history. Orders are paid from
+  the wallet; "Buy" now opens a checkout that pays from the balance, or tops
+  it up for exactly what is missing.
+- **Top-ups by card-to-card or crypto** (TRC20, BEP20, ERC20, TON): the app
+  shows the operator's card or address, the exact crypto amount at the
+  operator's rate, and copy buttons. The customer enters the bank tracking
+  number or the TXID; an admin checks it and approves or rejects it. A top-up
+  started from an order pays that order on approval and creates the service.
+- **Admin panel**: a Payments queue (pending first, duplicate receipts
+  flagged), owner-only Payment settings, and each customer's wallet with
+  manual adjustments. Every approval, rejection, adjustment and settings
+  change is audited.
+- Money rules are enforced by the database: a balance cannot go negative, and
+  a top-up or an order cannot be applied twice. See `docs/payments.md`.
+
+
 ### Changed — the app's new design
 
 - **Dark, teal design** from the product mock-ups, with Light, System and

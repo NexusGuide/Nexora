@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     func,
@@ -28,6 +31,11 @@ class User(UUIDMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "users"
+    # The balance can never go below zero, whatever the application does: a
+    # debit that would overdraw fails in the database, not only in Python.
+    __table_args__ = (
+        CheckConstraint("wallet_balance >= 0", name="wallet_balance_non_negative"),
+    )
 
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
@@ -39,6 +47,13 @@ class User(UUIDMixin, TimestampMixin, Base):
     is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     is_phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Wallet balance in the platform currency (IRT). Changed only by
+    # WalletService, under a row lock, together with a WalletTransaction row
+    # that records why — the ledger and the balance never drift apart.
+    wallet_balance: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"), server_default="0", nullable=False
+    )
 
     # Admin access. A NULL role means "no admin access at all".
     admin_role: Mapped[AdminRole | None] = mapped_column(

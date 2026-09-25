@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Devices
@@ -61,6 +62,7 @@ fun ProfileScreen(
     onOpenSettings: () -> Unit,
     onOpenStore: () -> Unit,
     onOpenServices: () -> Unit,
+    onOpenWallet: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -167,6 +169,14 @@ fun ProfileScreen(
                 icon = Icons.Filled.ShoppingCart,
                 title = stringResource(R.string.nav_store),
                 onClick = onOpenStore,
+            )
+            SettingsRow(
+                icon = Icons.Filled.AccountBalanceWallet,
+                title = stringResource(R.string.wallet_title),
+                subtitle = state.walletBalance?.let {
+                    stringResource(R.string.money_toman, Formatting.price(it))
+                },
+                onClick = onOpenWallet,
             )
 
             SectionTitle(stringResource(R.string.profile_devices))

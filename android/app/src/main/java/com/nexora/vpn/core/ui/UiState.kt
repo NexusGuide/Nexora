@@ -40,6 +40,13 @@ fun AppError.messageRes(): Int = when (this) {
         "ACCOUNT_EXISTS" -> R.string.auth_account_exists
         "VALIDATION_ERROR" -> R.string.auth_details_rejected
         "DEVICE_LIMIT_REACHED" -> R.string.device_limit_title
+        "INSUFFICIENT_BALANCE" -> R.string.error_insufficient_balance
+        "TOPUP_AMOUNT_OUT_OF_RANGE" -> R.string.error_topup_range
+        "TOO_MANY_PENDING_TOPUPS" -> R.string.error_topup_too_many
+        "TOPUP_REFERENCE_USED" -> R.string.error_topup_reference_used
+        "PAYMENT_METHOD_DISABLED" -> R.string.error_payment_method_disabled
+        "TOPUP_NOT_PENDING" -> R.string.error_topup_not_pending
+        "ORDER_NOT_PAYABLE" -> R.string.error_order_not_payable
         else -> R.string.error_unknown
     }
 }

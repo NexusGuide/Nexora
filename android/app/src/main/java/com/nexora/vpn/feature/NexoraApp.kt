@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,10 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.nexora.vpn.R
 import com.nexora.vpn.core.ui.SubScreen
 import com.nexora.vpn.core.vpn.XrayCore
@@ -59,6 +63,8 @@ import com.nexora.vpn.feature.stats.HistoryScreen
 import com.nexora.vpn.feature.stats.LogsScreen
 import com.nexora.vpn.feature.stats.StatsScreen
 import com.nexora.vpn.feature.store.StoreScreen
+import com.nexora.vpn.feature.wallet.TopUpScreen
+import com.nexora.vpn.feature.wallet.WalletScreen
 
 object Routes {
     const val ONBOARDING = "onboarding"
@@ -81,6 +87,12 @@ object Routes {
     const val HELP = "help"
     const val ABOUT = "about"
     const val LICENSES = "licenses"
+    const val WALLET = "wallet"
+    const val TOPUP = "topup?amount={amount}&order={order}"
+
+    /** The top-up form, optionally prefilled to cover an order and pay it on approval. */
+    fun topUp(amount: Long? = null, orderId: String? = null): String =
+        "topup?amount=${amount ?: ""}&order=${orderId.orEmpty()}"
 
     fun serverDetail(id: String) = "server/$id"
 }
@@ -224,6 +236,7 @@ fun NexoraApp(viewModel: AppViewModel = hiltViewModel()) {
                     onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     onOpenStore = { navController.navigate(Routes.STORE) },
                     onOpenServices = { navController.navigate(Routes.SERVICES) },
+                    onOpenWallet = { navController.navigate(Routes.WALLET) },
                 )
             }
 
@@ -237,9 +250,54 @@ fun NexoraApp(viewModel: AppViewModel = hiltViewModel()) {
             }
 
             composable(Routes.STORE) {
-                SubScreen(title = stringResource(R.string.nav_store), onBack = { navController.popBackStack() }) { p ->
-                    Box(Modifier.padding(p)) { StoreScreen() }
+                SubScreen(
+                    title = stringResource(R.string.nav_store),
+                    onBack = { navController.popBackStack() },
+                    actions = {
+                        IconButton(onClick = { navController.navigate(Routes.WALLET) }) {
+                            Icon(
+                                Icons.Filled.AccountBalanceWallet,
+                                contentDescription = stringResource(R.string.wallet_title),
+                            )
+                        }
+                    },
+                ) { p ->
+                    Box(Modifier.padding(p)) {
+                        StoreScreen(
+                            onTopUp = { amount, orderId ->
+                                navController.navigate(Routes.topUp(amount.takeIf { it > 0 }, orderId))
+                            },
+                            onPaid = { navController.switchTab(Routes.HOME) },
+                        )
+                    }
                 }
+            }
+
+            composable(Routes.WALLET) {
+                WalletScreen(
+                    onBack = { navController.popBackStack() },
+                    onTopUp = { navController.navigate(Routes.topUp()) },
+                )
+            }
+
+            composable(
+                Routes.TOPUP,
+                arguments = listOf(
+                    navArgument("amount") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("order") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) {
+                TopUpScreen(
+                    onBack = { navController.popBackStack() },
+                    onDone = {
+                        navController.navigate(Routes.WALLET) {
+                            // The form is done with; Back from the wallet
+                            // should not reopen a submitted form.
+                            popUpTo(Routes.TOPUP) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
 
             composable(Routes.SERVICES) {

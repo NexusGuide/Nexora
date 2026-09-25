@@ -3,10 +3,14 @@ package com.nexora.vpn.domain.repository
 import com.nexora.vpn.core.common.Outcome
 import com.nexora.vpn.domain.model.Device
 import com.nexora.vpn.domain.model.Order
+import com.nexora.vpn.domain.model.PaymentMethods
 import com.nexora.vpn.domain.model.Plan
 import com.nexora.vpn.domain.model.Subscription
+import com.nexora.vpn.domain.model.TopUp
+import com.nexora.vpn.domain.model.TopUpMethod
 import com.nexora.vpn.domain.model.User
 import com.nexora.vpn.domain.model.VpnConfig
+import com.nexora.vpn.domain.model.Wallet
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -86,4 +90,26 @@ interface ConfigRepository {
     suspend fun configs(subscriptionId: String? = null): Outcome<List<VpnConfig>>
     suspend fun activate(configId: String): Outcome<VpnConfig>
     suspend fun delete(configId: String): Outcome<Unit>
+}
+
+interface WalletRepository {
+    suspend fun wallet(): Outcome<Wallet>
+    suspend fun paymentMethods(): Outcome<PaymentMethods>
+    suspend fun topups(): Outcome<List<TopUp>>
+
+    /** Reports a payment for review. The wallet is credited only when an admin approves it. */
+    suspend fun submitTopUp(
+        method: TopUpMethod,
+        amount: Long,
+        reference: String,
+        payerNote: String?,
+        network: String?,
+        asset: String?,
+        orderId: String?,
+    ): Outcome<TopUp>
+
+    suspend fun cancelTopUp(topupId: String): Outcome<TopUp>
+
+    /** Pays a pending order from the wallet. Safe to repeat. */
+    suspend fun payOrder(orderId: String): Outcome<Order>
 }

@@ -72,3 +72,23 @@ class AdminRole(StrEnum):
     FINANCE = "FINANCE"
     SUPPORT = "SUPPORT"
     DEVELOPER = "DEVELOPER"
+
+
+class TopUpMethod(StrEnum):
+    """How a customer sent the money for a wallet top-up."""
+
+    CARD = "CARD"
+    CRYPTO = "CRYPTO"
+
+
+class TopUpStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+
+class WalletTxKind(StrEnum):
+    TOPUP = "TOPUP"
+    PURCHASE = "PURCHASE"
+    ADJUSTMENT = "ADJUSTMENT"

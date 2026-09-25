@@ -34,7 +34,11 @@ import com.nexora.vpn.core.ui.messageRes
 import com.nexora.vpn.domain.model.Plan
 
 @Composable
-fun StoreScreen(viewModel: StoreViewModel = hiltViewModel()) {
+fun StoreScreen(
+    onTopUp: (amount: Long, orderId: String) -> Unit = { _, _ -> },
+    onPaid: () -> Unit = {},
+    viewModel: StoreViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     when (val plans = state.plans) {
@@ -59,17 +63,30 @@ fun StoreScreen(viewModel: StoreViewModel = hiltViewModel()) {
         }
     }
 
-    // An order exists but payment does not yet — say exactly that rather than
-    // implying the service is live (spec rule 67).
-    state.createdOrder?.let {
+    // An order exists but payment does not yet — say exactly that, and offer
+    // the two real ways forward: pay from the wallet, or top it up first.
+    state.checkout?.let { checkout ->
+        CheckoutDialog(
+            checkout = checkout,
+            onPay = viewModel::payFromWallet,
+            onTopUp = {
+                viewModel.dismissCheckout()
+                onTopUp(checkout.topUpAmount, checkout.order.id)
+            },
+            onDismiss = viewModel::dismissCheckout,
+        )
+    }
+
+    state.paidOrder?.let {
         AlertDialog(
-            onDismissRequest = viewModel::dismissOrder,
-            title = { Text(stringResource(R.string.store_order_pending_title)) },
-            text = { Text(stringResource(R.string.store_order_pending_body)) },
+            onDismissRequest = viewModel::dismissPaid,
+            title = { Text(stringResource(R.string.checkout_paid_title)) },
+            text = { Text(stringResource(R.string.checkout_paid_body)) },
             confirmButton = {
-                TextButton(onClick = viewModel::dismissOrder) {
-                    Text(stringResource(R.string.action_ok))
-                }
+                TextButton(onClick = {
+                    viewModel.dismissPaid()
+                    onPaid()
+                }) { Text(stringResource(R.string.action_ok)) }
             },
         )
     }
@@ -153,4 +170,80 @@ private fun PlanCard(plan: Plan, isPurchasing: Boolean, onBuy: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun CheckoutDialog(
+    checkout: Checkout,
+    onPay: () -> Unit,
+    onTopUp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!checkout.paying) onDismiss() },
+        title = { Text(stringResource(R.string.checkout_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                if (checkout.planName.isNotBlank()) {
+                    Text(checkout.planName, style = MaterialTheme.typography.titleMedium)
+                }
+                Text(
+                    stringResource(
+                        R.string.checkout_price,
+                        stringResource(R.string.money_toman, Formatting.price(checkout.order.amount)),
+                    ),
+                )
+                when {
+                    checkout.loading -> InlineSpinner()
+                    checkout.balance == null -> Text(
+                        stringResource(R.string.checkout_balance_unknown),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    else -> {
+                        Text(
+                            stringResource(
+                                R.string.checkout_balance,
+                                stringResource(R.string.money_toman, Formatting.price(checkout.balance)),
+                            ),
+                        )
+                        if (!checkout.canPayFromWallet) {
+                            Text(
+                                if (checkout.topUpAvailable) {
+                                    stringResource(
+                                        R.string.checkout_short,
+                                        stringResource(R.string.money_toman, Formatting.price(checkout.order.amount - checkout.balance)),
+                                    )
+                                } else {
+                                    stringResource(R.string.checkout_no_methods)
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                checkout.loading -> Unit
+                checkout.canPayFromWallet -> Button(onClick = onPay, enabled = !checkout.paying) {
+                    if (checkout.paying) InlineSpinner() else Text(stringResource(R.string.checkout_pay_wallet))
+                }
+                checkout.topUpAvailable -> Button(onClick = onTopUp) {
+                    Text(
+                        stringResource(
+                            R.string.checkout_top_up,
+                            Formatting.price(checkout.topUpAmount),
+                        ),
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !checkout.paying) {
+                Text(stringResource(R.string.checkout_later))
+            }
+        },
+    )
 }

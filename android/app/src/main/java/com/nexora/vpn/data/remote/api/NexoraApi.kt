@@ -8,6 +8,10 @@ import com.nexora.vpn.data.remote.dto.ForgotPasswordRequestDto
 import com.nexora.vpn.data.remote.dto.LoginRequestDto
 import com.nexora.vpn.data.remote.dto.LogoutRequestDto
 import com.nexora.vpn.data.remote.dto.MessageDto
+import com.nexora.vpn.data.remote.dto.PaymentMethodsDto
+import com.nexora.vpn.data.remote.dto.TopUpCreateDto
+import com.nexora.vpn.data.remote.dto.TopUpDto
+import com.nexora.vpn.data.remote.dto.WalletDto
 import com.nexora.vpn.data.remote.dto.OrderCreateDto
 import com.nexora.vpn.data.remote.dto.OrderDto
 import com.nexora.vpn.data.remote.dto.PlanDto
@@ -159,4 +163,27 @@ interface NexoraApi {
     suspend fun deleteConfig(
         @Path("id") id: String,
     ): Response<ApiEnvelope<Map<String, String>>>
+
+    // --- wallet -------------------------------------------------------------
+
+    @GET("api/v1/payment-methods")
+    suspend fun paymentMethods(): Response<ApiEnvelope<PaymentMethodsDto>>
+
+    @GET("api/v1/wallet")
+    suspend fun wallet(): Response<ApiEnvelope<WalletDto>>
+
+    @GET("api/v1/wallet/topups")
+    suspend fun topups(): Response<ApiEnvelope<List<TopUpDto>>>
+
+    @POST("api/v1/wallet/topups")
+    suspend fun createTopup(
+        @Body body: TopUpCreateDto,
+    ): Response<ApiEnvelope<TopUpDto>>
+
+    @POST("api/v1/wallet/topups/{id}/cancel")
+    suspend fun cancelTopup(@Path("id") id: String): Response<ApiEnvelope<TopUpDto>>
+
+    /** Pays a pending order from the wallet. Idempotent on the server. */
+    @POST("api/v1/orders/{id}/pay")
+    suspend fun payOrder(@Path("id") id: String): Response<ApiEnvelope<OrderDto>>
 }

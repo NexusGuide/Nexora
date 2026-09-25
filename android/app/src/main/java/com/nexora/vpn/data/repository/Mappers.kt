@@ -6,6 +6,19 @@ import com.nexora.vpn.data.remote.dto.OrderDto
 import com.nexora.vpn.data.remote.dto.PlanDto
 import com.nexora.vpn.data.remote.dto.SubscriptionDto
 import com.nexora.vpn.data.remote.dto.UserDto
+import com.nexora.vpn.data.remote.dto.PaymentMethodsDto
+import com.nexora.vpn.data.remote.dto.TopUpDto
+import com.nexora.vpn.data.remote.dto.WalletDto
+import com.nexora.vpn.data.remote.dto.WalletTxDto
+import com.nexora.vpn.domain.model.CardMethod
+import com.nexora.vpn.domain.model.CryptoWallet
+import com.nexora.vpn.domain.model.PaymentMethods
+import com.nexora.vpn.domain.model.TopUp
+import com.nexora.vpn.domain.model.TopUpMethod
+import com.nexora.vpn.domain.model.TopUpStatus
+import com.nexora.vpn.domain.model.Wallet
+import com.nexora.vpn.domain.model.WalletTransaction
+import com.nexora.vpn.domain.model.WalletTxKind
 import com.nexora.vpn.domain.model.Device
 import com.nexora.vpn.domain.model.Order
 import com.nexora.vpn.domain.model.OrderStatus
@@ -124,3 +137,50 @@ internal fun ConfigDto.toDomain(): VpnConfig = VpnConfig(
     latencyMs = latencyMs,
     isActive = isActive,
 )
+
+// --- wallet -------------------------------------------------------------------
+
+internal fun WalletTxDto.toDomain(): WalletTransaction = WalletTransaction(
+    id = id,
+    kind = WalletTxKind.fromApi(kind),
+    amount = parseSignedAmount(amount),
+    balanceAfter = parseAmount(balanceAfter),
+    note = note,
+    createdAtEpochMs = parseIsoToEpochMs(createdAt),
+)
+
+internal fun WalletDto.toDomain(): Wallet = Wallet(
+    balance = parseAmount(balance),
+    currency = currency,
+    pendingTopups = pendingTopups,
+    transactions = transactions.map { it.toDomain() },
+)
+
+internal fun PaymentMethodsDto.toDomain(): PaymentMethods = PaymentMethods(
+    minTopup = parseAmount(minTopup),
+    maxTopup = parseAmount(maxTopup),
+    card = card?.let { CardMethod(it.number, it.holder, it.bank, it.instructions) },
+    crypto = crypto.map { CryptoWallet(it.network, it.asset, it.address, it.rate) },
+    cryptoInstructions = cryptoInstructions,
+)
+
+internal fun TopUpDto.toDomain(): TopUp = TopUp(
+    id = id,
+    method = if (method.equals("CRYPTO", ignoreCase = true)) TopUpMethod.CRYPTO else TopUpMethod.CARD,
+    status = TopUpStatus.fromApi(status),
+    amount = parseAmount(amount),
+    reference = reference,
+    network = network,
+    asset = asset,
+    cryptoAmount = cryptoAmount?.let { if ('.' in it) it.trimEnd('0').trimEnd('.') else it },
+    orderId = orderId,
+    creditedAmount = creditedAmount?.let(::parseAmount),
+    rejectReason = rejectReason,
+    createdAtEpochMs = parseIsoToEpochMs(createdAt),
+)
+
+/** Like [parseAmount], keeping the sign: a purchase is a negative ledger entry. */
+internal fun parseSignedAmount(raw: String?): Long {
+    val trimmed = raw?.trim().orEmpty()
+    return if (trimmed.startsWith("-")) -parseAmount(trimmed.drop(1)) else parseAmount(trimmed)
+}

@@ -12,12 +12,14 @@ import com.nexora.vpn.data.repository.OrderRepositoryImpl
 import com.nexora.vpn.data.repository.StoreRepositoryImpl
 import com.nexora.vpn.data.repository.SubscriptionRepositoryImpl
 import com.nexora.vpn.data.repository.UserRepositoryImpl
+import com.nexora.vpn.data.repository.WalletRepositoryImpl
 import com.nexora.vpn.domain.repository.AuthRepository
 import com.nexora.vpn.domain.repository.ConfigRepository
 import com.nexora.vpn.domain.repository.OrderRepository
 import com.nexora.vpn.domain.repository.StoreRepository
 import com.nexora.vpn.domain.repository.SubscriptionRepository
 import com.nexora.vpn.domain.repository.UserRepository
+import com.nexora.vpn.domain.repository.WalletRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -148,4 +150,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun configRepository(impl: ConfigRepositoryImpl): ConfigRepository
+
+    @Binds
+    @Singleton
+    abstract fun walletRepository(impl: WalletRepositoryImpl): WalletRepository
 }

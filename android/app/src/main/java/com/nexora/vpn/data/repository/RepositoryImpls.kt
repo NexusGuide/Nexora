@@ -12,18 +12,24 @@ import com.nexora.vpn.data.remote.dto.LogoutRequestDto
 import com.nexora.vpn.data.remote.dto.OrderCreateDto
 import com.nexora.vpn.data.remote.dto.RegisterRequestDto
 import com.nexora.vpn.data.remote.dto.ResetPasswordRequestDto
+import com.nexora.vpn.data.remote.dto.TopUpCreateDto
 import com.nexora.vpn.domain.model.Device
 import com.nexora.vpn.domain.model.Order
+import com.nexora.vpn.domain.model.PaymentMethods
 import com.nexora.vpn.domain.model.Plan
 import com.nexora.vpn.domain.model.Subscription
+import com.nexora.vpn.domain.model.TopUp
+import com.nexora.vpn.domain.model.TopUpMethod
 import com.nexora.vpn.domain.model.User
 import com.nexora.vpn.domain.model.VpnConfig
+import com.nexora.vpn.domain.model.Wallet
 import com.nexora.vpn.domain.repository.AuthRepository
 import com.nexora.vpn.domain.repository.ConfigRepository
 import com.nexora.vpn.domain.repository.OrderRepository
 import com.nexora.vpn.domain.repository.StoreRepository
 import com.nexora.vpn.domain.repository.SubscriptionRepository
 import com.nexora.vpn.domain.repository.UserRepository
+import com.nexora.vpn.domain.repository.WalletRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -256,4 +262,47 @@ class ConfigRepositoryImpl @Inject constructor(
 
     override suspend fun delete(configId: String): Outcome<Unit> =
         ApiCall { api.deleteConfig(configId) }.map { }
+}
+
+@Singleton
+class WalletRepositoryImpl @Inject constructor(
+    private val api: NexoraApi,
+) : WalletRepository {
+
+    override suspend fun wallet(): Outcome<Wallet> =
+        ApiCall { api.wallet() }.map { it.toDomain() }
+
+    override suspend fun paymentMethods(): Outcome<PaymentMethods> =
+        ApiCall { api.paymentMethods() }.map { it.toDomain() }
+
+    override suspend fun topups(): Outcome<List<TopUp>> =
+        ApiCall { api.topups() }.map { list -> list.map { it.toDomain() } }
+
+    override suspend fun submitTopUp(
+        method: TopUpMethod,
+        amount: Long,
+        reference: String,
+        payerNote: String?,
+        network: String?,
+        asset: String?,
+        orderId: String?,
+    ): Outcome<TopUp> = ApiCall {
+        api.createTopup(
+            TopUpCreateDto(
+                method = method.name,
+                amount = amount.toString(),
+                reference = reference,
+                payerNote = payerNote?.trim()?.takeIf { it.isNotEmpty() },
+                network = network,
+                asset = asset,
+                orderId = orderId,
+            ),
+        )
+    }.map { it.toDomain() }
+
+    override suspend fun cancelTopUp(topupId: String): Outcome<TopUp> =
+        ApiCall { api.cancelTopup(topupId) }.map { it.toDomain() }
+
+    override suspend fun payOrder(orderId: String): Outcome<Order> =
+        ApiCall { api.payOrder(orderId) }.map { it.toDomain() }
 }

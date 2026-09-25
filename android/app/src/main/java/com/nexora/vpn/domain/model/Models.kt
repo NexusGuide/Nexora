@@ -151,3 +151,82 @@ data class VpnConfig(
     override fun toString(): String =
         "VpnConfig(id=$id, name=$name, host=$host, active=$isActive)"
 }
+
+// --- wallet -----------------------------------------------------------------
+
+/** Amounts are whole Toman, as everywhere else in the app. */
+data class Wallet(
+    val balance: Long,
+    val currency: String,
+    val pendingTopups: Int,
+    val transactions: List<WalletTransaction>,
+)
+
+data class WalletTransaction(
+    val id: String,
+    val kind: WalletTxKind,
+    val amount: Long,
+    val balanceAfter: Long,
+    val note: String? = null,
+    val createdAtEpochMs: Long? = null,
+)
+
+enum class WalletTxKind {
+    TOPUP, PURCHASE, ADJUSTMENT, UNKNOWN;
+
+    companion object {
+        fun fromApi(raw: String?): WalletTxKind =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: UNKNOWN
+    }
+}
+
+data class CardMethod(
+    val number: String,
+    val holder: String,
+    val bank: String,
+    val instructions: String,
+)
+
+data class CryptoWallet(
+    val network: String,
+    val asset: String,
+    val address: String,
+    /** Toman per one unit of [asset], as a decimal string. */
+    val rate: String,
+)
+
+data class PaymentMethods(
+    val minTopup: Long,
+    val maxTopup: Long,
+    val card: CardMethod?,
+    val crypto: List<CryptoWallet>,
+    val cryptoInstructions: String,
+) {
+    val hasAny: Boolean get() = card != null || crypto.isNotEmpty()
+}
+
+enum class TopUpMethod { CARD, CRYPTO }
+
+enum class TopUpStatus {
+    PENDING, APPROVED, REJECTED, CANCELLED, UNKNOWN;
+
+    companion object {
+        fun fromApi(raw: String?): TopUpStatus =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: UNKNOWN
+    }
+}
+
+data class TopUp(
+    val id: String,
+    val method: TopUpMethod,
+    val status: TopUpStatus,
+    val amount: Long,
+    val reference: String,
+    val network: String? = null,
+    val asset: String? = null,
+    val cryptoAmount: String? = null,
+    val orderId: String? = null,
+    val creditedAmount: Long? = null,
+    val rejectReason: String? = null,
+    val createdAtEpochMs: Long? = null,
+)

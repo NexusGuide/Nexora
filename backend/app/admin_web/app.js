@@ -200,6 +200,10 @@ const ERROR_FA = {
   LAST_OWNER: "این آخرین مالک فعال است؛ ابتدا مالک دیگری تعیین کنید.",
   INVALID_PANEL_GROUPS: "گروه‌های انتخاب‌شده معتبر نیستند.",
   PANEL_ERROR: "پنل درخواست را انجام نداد.",
+  TOPUP_NOT_PENDING: "این درخواست قبلاً بررسی شده است.",
+  TOPUP_NOT_FOUND: "درخواست شارژ پیدا نشد.",
+  INSUFFICIENT_BALANCE: "موجودی کیف پول کافی نیست.",
+  WALLET_TX_DUPLICATE: "این تراکنش قبلاً ثبت شده است.",
   INTERNAL_ERROR: "خطای داخلی سرور.",
 };
 
@@ -305,6 +309,11 @@ const BADGES = {
   panel: { ACTIVE: ["در دسترس", "ok"], DISABLED: ["غیرفعال", ""], UNREACHABLE: ["خارج از دسترس", "danger"] },
   server: { ACTIVE: ["فعال", "ok"], MAINTENANCE: ["در حال تعمیر", "warn"], DISABLED: ["غیرفعال", ""] },
   device: { ACTIVE: ["فعال", "ok"], REVOKED: ["لغوشده", ""] },
+  topup: {
+    PENDING: ["در انتظار بررسی", "warn"], APPROVED: ["تأییدشده", "ok"],
+    REJECTED: ["ردشده", "danger"], CANCELLED: ["لغو توسط کاربر", ""],
+  },
+  wallet: { TOPUP: ["شارژ", "ok"], PURCHASE: ["خرید", ""], ADJUSTMENT: ["اصلاح دستی", "warn"] },
 };
 
 function badge(kind, value) {
@@ -555,12 +564,14 @@ function sessionEnded(message) {
 // ---------------------------------------------------------------- router
 const PAGES = [
   { path: "dashboard", title: "داشبورد", cap: "stats", render: pageDashboard },
+  { path: "topups", title: "پرداخت‌ها", cap: "payments", render: pageTopups },
   { path: "orders", title: "سفارش‌ها", cap: "orders", render: pageOrders },
   { path: "plans", title: "پلن‌ها", cap: "plans", render: pagePlans },
   { path: "users", title: "کاربران", cap: "users.read", render: pageUsers },
   { path: "subscriptions", title: "اشتراک‌ها", cap: "subscriptions.read", render: pageSubscriptions },
   { path: "panels", title: "پنل‌ها", cap: "panels", render: pagePanels },
   { path: "servers", title: "سرورها", cap: "panels", render: pageServers },
+  { path: "payment-settings", title: "تنظیمات پرداخت", cap: "payments.settings", render: pagePaymentSettings },
   { path: "audit", title: "گزارش رویدادها", cap: "audit.read", render: pageAudit },
 ];
 
@@ -655,7 +666,10 @@ async function pageDashboard(container) {
         `فعال ${numberFmt.format(byStatus.ACTIVE || 0)} · معلق ${numberFmt.format(byStatus.SUSPENDED || 0)} · مسدود ${numberFmt.format(byStatus.BANNED || 0)}`),
       statCard("اشتراک‌های فعال", fmtNum(s.subscriptions.active),
         `${numberFmt.format(s.subscriptions.expiring_7d)} اشتراک تا 7 روز آینده منقضی می‌شود`),
-      statCard("سفارش‌های در انتظار پرداخت", fmtNum(s.orders.pending), "منتظر تأیید کارت‌به‌کارت",
+      statCard("پرداخت‌های منتظر بررسی", fmtNum((s.topups && s.topups.pending) || 0),
+        "رسیدهای کارت‌به‌کارت و کریپتو که هنوز تأیید یا رد نشده‌اند",
+        { warn: Boolean(s.topups && s.topups.pending), href: can("payments") ? "#/topups" : null }),
+      statCard("سفارش‌های در انتظار پرداخت", fmtNum(s.orders.pending), "هنوز از کیف پول پرداخت نشده‌اند",
         { warn: s.orders.pending > 0, href: can("orders") ? "#/orders" : null }),
       statCard("پرداخت‌شده بدون سرویس", fmtNum(s.orders.paid_unprovisioned),
         "در صف ساخت، یا ساخت سرویس ناموفق بوده", { warn: s.orders.paid_unprovisioned > 0 }),
@@ -972,6 +986,7 @@ async function pageUserDetail(container, userId) {
         h("dt", null, "آخرین ورود"), h("dd", null, fmtDate(u.last_login_at)),
         h("dt", null, "شناسه"), h("dd", null, h("code", null, u.id))),
       userAdminActions(u, reload)),
+    can("payments") ? walletCard(u) : null,
     h("div", { class: "card" }, h("h2", null, "اشتراک‌ها"), subscriptionsTable(u.subscriptions, { showUser: false })),
     h("div", { class: "card" }, h("h2", null, "دستگاه‌ها"), devicesTable(u, reload)),
     h("div", { class: "card" }, h("h2", null, "آخرین سفارش‌ها"), table([
@@ -1327,6 +1342,10 @@ const ACTION_FA = {
   "user.update": "تغییر حساب کاربر",
   "device.revoke": "حذف دستگاه",
   "admin.bootstrap_owner": "تعیین مالک اولیه",
+  "topup.approve": "تأیید شارژ کیف پول",
+  "topup.reject": "رد شارژ کیف پول",
+  "wallet.adjust": "اصلاح دستی موجودی",
+  "payments.settings_update": "تغییر تنظیمات پرداخت",
 };
 
 async function pageAudit(container, _segments, query) {
@@ -1347,6 +1366,263 @@ async function pageAudit(container, _segments, query) {
       : h("span", { class: "dim" }, "—")) },
   ], data.items, "رویدادی ثبت نشده است."),
   pager(data.total, limit, offset, (next) => go(`#/audit${next ? `?offset=${next}` : ""}`)));
+}
+
+// --------------------------------------------------------------- payments
+const METHOD_FA = { CARD: "کارت‌به‌کارت", CRYPTO: "ارز دیجیتال" };
+let topupsFilter = "PENDING";
+const TOPUP_FILTERS = [
+  ["PENDING", "در انتظار بررسی"], ["", "همه"], ["APPROVED", "تأییدشده"],
+  ["REJECTED", "ردشده"], ["CANCELLED", "لغو توسط کاربر"],
+];
+
+async function pageTopups(container) {
+  const body = h("div", { class: "card" }, loading());
+  const select = h("select", { "aria-label": "وضعیت" },
+    TOPUP_FILTERS.map(([v, l]) => h("option", { value: v, selected: v === topupsFilter }, l)));
+
+  const load = async () => {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (topupsFilter) qs.set("status", topupsFilter);
+    const data = await api("GET", `/admin/topups?${qs}`);
+    if (!container.isConnected) return;
+    clear(body).append(table([
+      { label: "کاربر", cell: (t) => h("span", null, userLink(t.username),
+        h("div", { class: "dim small" }, "موجودی: ", fmtMoney(t.wallet_balance, t.currency))) },
+      { label: "روش", cell: (t) => h("span", null, METHOD_FA[t.method] || t.method,
+        t.network ? h("div", { class: "dim small ltr" }, `${t.asset} · ${t.network}`) : null) },
+      { label: "مبلغ", cell: (t) => h("span", null, fmtMoney(t.amount, t.currency),
+        t.crypto_amount ? h("div", { class: "dim small ltr" }, `${t.crypto_amount} ${t.asset}`) : null,
+        t.credited_amount && t.credited_amount !== t.amount
+          ? h("div", { class: "small" }, "واریزشده: ", fmtMoney(t.credited_amount, t.currency)) : null) },
+      { label: "رسید", cell: (t) => h("span", null, shortRef(t.reference),
+        t.reference_seen > 1 ? h("div", { class: "badge danger" }, `${t.reference_seen} بار ثبت شده`) : null,
+        t.payer_note ? h("div", { class: "dim small" }, t.payer_note) : null) },
+      { label: "وضعیت", cell: (t) => h("span", null, badge("topup", t.status),
+        t.order_id ? h("div", { class: "dim small" }, "برای یک سفارش") : null,
+        t.reject_reason ? h("div", { class: "dim small" }, t.reject_reason) : null) },
+      { label: "زمان", cell: (t) => fmtDate(t.created_at) },
+      { label: "عملیات", class: "actions", cell: (t) => topupActions(t, load) },
+    ], data.items, topupsFilter === "PENDING" ? "پرداختی در انتظار بررسی نیست." : "موردی یافت نشد."));
+  };
+
+  select.addEventListener("change", () => {
+    topupsFilter = select.value;
+    clear(body).append(loading());
+    load().catch((err) => { if (container.isConnected) clear(body).append(errorBox(err)); });
+  });
+  container.append(pageHead("پرداخت‌ها", select, refreshButton(() => load().catch(toastError))), body);
+  await load();
+}
+
+/** A long transaction hash, shortened for the table; the full value is in
+ *  the tooltip and in the approve dialog, and a click copies it. */
+function shortRef(ref) {
+  const text = ref.length > 22 ? `${ref.slice(0, 10)}…${ref.slice(-8)}` : ref;
+  const el = h("code", { title: ref, class: "ltr" }, text);
+  el.addEventListener("click", () => {
+    if (navigator.clipboard) navigator.clipboard.writeText(ref).then(() => toast("کپی شد."), () => {});
+  });
+  return el;
+}
+
+function topupDetails(t) {
+  return h("dl", { class: "kv" },
+    h("dt", null, "کاربر"), h("dd", null, h("span", { class: "ltr" }, t.username)),
+    h("dt", null, "روش"), h("dd", null, METHOD_FA[t.method] || t.method),
+    h("dt", null, "مبلغ اعلام‌شده"), h("dd", null, fmtMoney(t.amount, t.currency)),
+    t.crypto_amount ? h("dt", null, "مقدار ارز") : null,
+    t.crypto_amount ? h("dd", null, h("span", { class: "ltr" }, `${t.crypto_amount} ${t.asset} (${t.network}) · نرخ ${t.rate}`)) : null,
+    h("dt", null, "مقصد"), h("dd", null, h("code", null, t.destination)),
+    h("dt", null, t.method === "CRYPTO" ? "هش تراکنش" : "شماره پیگیری"), h("dd", null, h("code", null, t.reference)),
+    t.payer_note ? h("dt", null, "توضیح کاربر") : null,
+    t.payer_note ? h("dd", null, t.payer_note) : null);
+}
+
+function topupActions(t, reload) {
+  if (t.status !== "PENDING") return h("span", { class: "dim" }, "—");
+  const approve = h("button", { class: "btn sm primary", type: "button" }, "تأیید");
+  approve.addEventListener("click", () => {
+    formDialog({
+      title: "تأیید پرداخت و شارژ کیف پول",
+      submitText: "تأیید و شارژ",
+      fields: [
+        { name: "amount", label: "مبلغی که واقعاً دریافت شد (تومان)", value: String(t.amount).split(".")[0],
+          attrs: { inputmode: "numeric", dir: "ltr" },
+          hint: t.method === "CRYPTO"
+            ? "تراکنش را روی شبکه بررسی کنید: مقصد، مقدار و تعداد تأییدها."
+            : "واریز را با شماره پیگیری در صورت‌حساب بانک بررسی کنید." },
+      ],
+      onSubmit: async (v) => {
+        const amount = toInt(v.amount);
+        if (!amount || amount <= 0) throw new ApiError("مبلغ معتبر نیست.", "VALIDATION_ERROR", 422);
+        const r = await api("POST", `/admin/topups/${encodeURIComponent(t.id)}/approve`, { amount: String(amount) });
+        toast(r.paid_order_id
+          ? "کیف پول شارژ شد، سفارش کاربر پرداخت شد و ساخت سرویس در صف قرار گرفت."
+          : "کیف پول کاربر شارژ شد.");
+        await reload();
+      },
+    });
+    // Show what is being approved above the amount field.
+    const modal = document.querySelector(".modal form");
+    if (modal) modal.prepend(topupDetails(t));
+  });
+  const reject = h("button", { class: "btn sm danger", type: "button" }, "رد");
+  reject.addEventListener("click", () => {
+    formDialog({
+      title: "رد پرداخت",
+      submitText: "رد کن",
+      fields: [{ name: "reason", label: "دلیل (به کاربر نمایش داده می‌شود)", value: "واریزی با این مشخصات پیدا نشد.", required: true }],
+      onSubmit: async (v) => {
+        await api("POST", `/admin/topups/${encodeURIComponent(t.id)}/reject`, { reason: v.reason });
+        toast("پرداخت رد شد.");
+        await reload();
+      },
+    });
+  });
+  return [approve, reject];
+}
+
+function walletCard(u) {
+  const body = h("div", null, loading());
+  const card = h("div", { class: "card" }, h("h2", null, "کیف پول"), body);
+  const load = async () => {
+    const w = await api("GET", `/admin/users/${encodeURIComponent(u.id)}/wallet`);
+    if (!card.isConnected) return;
+    const adjust = h("button", { class: "btn sm", type: "button" }, "اصلاح دستی موجودی");
+    adjust.addEventListener("click", () => formDialog({
+      title: "اصلاح دستی موجودی",
+      submitText: "ثبت",
+      fields: [
+        { name: "amount", label: "مبلغ (تومان) — مثبت برای افزایش، منفی برای کاهش", attrs: { dir: "ltr", inputmode: "numeric" }, required: true },
+        { name: "note", label: "دلیل (در گزارش رویدادها ثبت می‌شود)", required: true },
+      ],
+      onSubmit: async (v) => {
+        const raw = normaliseDigits(v.amount).replace(/[,\s]/g, "");
+        if (!/^-?\d+$/.test(raw) || Number(raw) === 0) throw new ApiError("مبلغ معتبر نیست.", "VALIDATION_ERROR", 422);
+        await api("POST", `/admin/users/${encodeURIComponent(u.id)}/wallet/adjust`, { amount: raw, note: v.note });
+        toast("موجودی اصلاح شد.");
+        clear(body).append(loading());
+        await load();
+      },
+    }));
+    clear(body).append(
+      h("div", { class: "toolbar" }, h("strong", null, "موجودی: ", fmtMoney(w.balance, "IRT")), adjust),
+      table([
+        { label: "نوع", cell: (t) => badge("wallet", t.kind) },
+        { label: "مبلغ", cell: (t) => fmtMoney(t.amount, "IRT") },
+        { label: "موجودی بعد", cell: (t) => fmtMoney(t.balance_after, "IRT") },
+        { label: "توضیح", cell: (t) => t.note || h("span", { class: "dim" }, "—") },
+        { label: "زمان", cell: (t) => fmtDate(t.created_at) },
+      ], w.transactions, "تراکنشی ثبت نشده است."));
+  };
+  load().catch((err) => { if (card.isConnected) clear(body).append(errorBox(err)); });
+  return card;
+}
+
+const NETWORKS = [["TRC20", "TRC20 (Tron)"], ["BEP20", "BEP20 (BSC)"], ["ERC20", "ERC20 (Ethereum)"], ["TON", "TON"]];
+const ASSETS = [["USDT", "USDT"], ["TRX", "TRX"], ["TON", "TON"], ["USDC", "USDC"]];
+
+async function pagePaymentSettings(container) {
+  container.append(pageHead("تنظیمات پرداخت"), loading());
+  const s = await api("GET", "/admin/payment-settings");
+  if (!container.isConnected) return;
+
+  const errorHost = h("div");
+  const field = (label, input, hint) => h("div", { class: "field" }, h("label", null, label), input, hint ? h("span", { class: "hint" }, hint) : null);
+  const text = (value, attrs = {}) => { const i = h("input", { type: "text", ...attrs }); i.value = value ?? ""; return i; };
+  const check = (value) => h("input", { type: "checkbox", checked: Boolean(value) });
+  const area = (value) => { const t = h("textarea", { rows: 2 }); t.value = value ?? ""; return t; };
+
+  const minTopup = text(String(s.min_topup).split(".")[0], { dir: "ltr", inputmode: "numeric" });
+  const maxTopup = text(String(s.max_topup).split(".")[0], { dir: "ltr", inputmode: "numeric" });
+
+  const cardEnabled = check(s.card.enabled);
+  const cardNumber = text(s.card.number, { dir: "ltr", inputmode: "numeric", placeholder: "16 رقم" });
+  const cardHolder = text(s.card.holder);
+  const cardBank = text(s.card.bank);
+  const cardInstr = area(s.card.instructions);
+
+  const cryptoEnabled = check(s.crypto.enabled);
+  const cryptoInstr = area(s.crypto.instructions);
+  const walletsHost = h("div");
+  const walletRows = [];
+  const addWallet = (w = { network: "TRC20", asset: "USDT", address: "", rate: "" }) => {
+    const network = h("select", null, NETWORKS.map(([v, l]) => h("option", { value: v, selected: v === w.network }, l)));
+    const asset = h("select", null, ASSETS.map(([v, l]) => h("option", { value: v, selected: v === w.asset }, l)));
+    const address = text(w.address, { dir: "ltr", placeholder: "آدرس کیف پول" });
+    const rate = text(w.rate ? String(w.rate).split(".")[0] : "", { dir: "ltr", inputmode: "numeric", placeholder: "تومان به ازای هر واحد" });
+    const remove = h("button", { class: "btn sm danger", type: "button" }, "حذف");
+    const row = h("div", { class: "card" },
+      h("div", { class: "toolbar" }, network, asset, remove),
+      field("آدرس", address, "آدرس را دوباره با کیف پول خود مقایسه کنید؛ پرداخت به آدرس اشتباه برگشت‌پذیر نیست."),
+      field("نرخ (تومان برای هر 1 واحد)", rate, "نرخ را خودتان به‌روز نگه دارید؛ برنامه نرخ لحظه‌ای را حدس نمی‌زند."));
+    const entry = { network, asset, address, rate, row };
+    remove.addEventListener("click", () => { row.remove(); walletRows.splice(walletRows.indexOf(entry), 1); });
+    walletRows.push(entry);
+    walletsHost.append(row);
+  };
+  for (const w of s.crypto.wallets) addWallet(w);
+  const addBtn = h("button", { class: "btn sm", type: "button" }, "افزودن کیف پول");
+  addBtn.addEventListener("click", () => addWallet());
+
+  const save = h("button", { class: "btn primary", type: "button" }, "ذخیره تنظیمات");
+  save.addEventListener("click", async () => {
+    const body = {
+      currency: "IRT",
+      min_topup: String(toInt(minTopup.value) || 0),
+      max_topup: String(toInt(maxTopup.value) || 0),
+      card: {
+        enabled: cardEnabled.checked,
+        number: normaliseDigits(cardNumber.value).replace(/[\s-]/g, ""),
+        holder: cardHolder.value.trim(),
+        bank: cardBank.value.trim(),
+        instructions: cardInstr.value.trim(),
+      },
+      crypto: {
+        enabled: cryptoEnabled.checked,
+        instructions: cryptoInstr.value.trim(),
+        wallets: walletRows.map((w) => ({
+          network: w.network.value, asset: w.asset.value,
+          address: w.address.value.trim(), rate: String(toInt(w.rate.value) || 0),
+        })),
+      },
+    };
+    const ok = await confirmDialog({
+      title: "ذخیره تنظیمات پرداخت",
+      message: [
+        h("p", null, "از این پس مشتری‌ها پول را به این مقصدها واریز می‌کنند:"),
+        h("dl", { class: "kv" },
+          h("dt", null, "کارت"), h("dd", null, body.card.enabled ? h("code", null, body.card.number) : "غیرفعال"),
+          ...body.crypto.wallets.flatMap((w) => [h("dt", null, `${w.asset} ${w.network}`), h("dd", null, h("code", null, w.address))])),
+        h("p", { class: "alert warn" }, "شماره کارت و آدرس‌ها را یک بار دیگر بررسی کنید."),
+      ],
+      confirmText: "ذخیره",
+    });
+    if (!ok) return;
+    await busy(save, async () => {
+      clear(errorHost);
+      try {
+        await api("PUT", "/admin/payment-settings", body);
+        toast("تنظیمات پرداخت ذخیره شد.");
+      } catch (err) { errorHost.append(errorBox(err)); }
+    });
+  });
+
+  clear(container).append(
+    pageHead("تنظیمات پرداخت"),
+    h("p", { class: "dim small" }, "این اطلاعات در اپ به مشتری نمایش داده می‌شود. فقط مالک می‌تواند آن را تغییر دهد و هر تغییر در گزارش رویدادها ثبت می‌شود."),
+    errorHost,
+    h("div", { class: "card" }, h("h2", null, "محدوده مبلغ شارژ (تومان)"),
+      field("حداقل", minTopup), field("حداکثر", maxTopup)),
+    h("div", { class: "card" }, h("h2", null, "کارت‌به‌کارت"),
+      h("label", { class: "check" }, cardEnabled, h("span", null, "فعال")),
+      field("شماره کارت", cardNumber), field("نام صاحب کارت", cardHolder), field("نام بانک", cardBank),
+      field("توضیحات برای مشتری", cardInstr)),
+    h("div", { class: "card" }, h("h2", null, "ارز دیجیتال"),
+      h("label", { class: "check" }, cryptoEnabled, h("span", null, "فعال")),
+      walletsHost, addBtn, field("توضیحات برای مشتری", cryptoInstr)),
+    h("div", { class: "actions-row" }, save));
 }
 
 // ------------------------------------------------------------------- boot

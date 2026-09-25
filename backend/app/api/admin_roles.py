@@ -47,6 +47,11 @@ CAPABILITIES: dict[str, frozenset[AdminRole]] = {
     "subscriptions.read": frozenset({M, D, S}),
     # The audit log shows everyone's actions, including other admins'.
     "audit.read": frozenset({M}),
+    # Reviewing top-ups and correcting a wallet: finance work.
+    "payments": frozenset({M, F}),
+    # Where customers send their money. Whoever can change this can redirect
+    # every payment to their own card, so it is OWNER only.
+    "payments.settings": frozenset(),
     # Granting or removing admin roles: OWNER only.
     "roles.write": frozenset(),
 }

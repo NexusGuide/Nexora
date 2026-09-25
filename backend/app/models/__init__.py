@@ -23,7 +23,10 @@ from app.models.enums import (
     PlanStatus,
     ServerStatus,
     SubscriptionStatus,
+    TopUpMethod,
+    TopUpStatus,
     UserStatus,
+    WalletTxKind,
 )
 from app.models.panel import AuditLog, Panel, Server, ServerGroup
 from app.models.user import (
@@ -33,10 +36,12 @@ from app.models.user import (
     UserDevice,
     VerificationToken,
 )
+from app.models.wallet import AppSetting, TopUp, WalletTransaction
 
 __all__ = [
     "UNLIMITED_TRAFFIC",
     "AdminRole",
+    "AppSetting",
     "AuditLog",
     "Config",
     "DeviceStatus",
@@ -57,8 +62,13 @@ __all__ = [
     "ServerStatus",
     "Subscription",
     "SubscriptionStatus",
+    "TopUp",
+    "TopUpMethod",
+    "TopUpStatus",
     "User",
     "UserDevice",
     "UserStatus",
     "VerificationToken",
+    "WalletTransaction",
+    "WalletTxKind",
 ]

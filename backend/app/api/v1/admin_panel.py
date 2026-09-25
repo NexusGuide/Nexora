@@ -166,6 +166,12 @@ async def admin_stats(request: Request, session: SessionDep, admin: AnyAdmin):
             Order.status == OrderStatus.PAID, Order.subscription_id.is_(None)
         )
     )
+    from app.models.enums import TopUpStatus
+    from app.models.wallet import TopUp
+
+    topups_pending = await session.scalar(
+        select(func.count()).select_from(TopUp).where(TopUp.status == TopUpStatus.PENDING)
+    )
     panels_by_status = {
         status.value: count
         for status, count in (
@@ -220,6 +226,7 @@ async def admin_stats(request: Request, session: SessionDep, admin: AnyAdmin):
                 "pending": orders_pending or 0,
                 "paid_unprovisioned": paid_unprovisioned or 0,
             },
+            "topups": {"pending": topups_pending or 0},
             "revenue_30d": revenue,
             "panels": {
                 "total": sum(panels_by_status.values()),

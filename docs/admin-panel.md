@@ -26,6 +26,8 @@ own API. The panel does not estimate, cache or invent anything.
 | Section | What you can do |
 |---|---|
 | Dashboard | Users by status, active subscriptions, subscriptions expiring in the next 7 days, pending orders, paid orders with no subscription yet, panels reachable at their last test, and paid revenue over the last 30 days per currency (Finance and Manager only). |
+| Payments | Card-to-card and crypto top-ups waiting for review, oldest first. Approve (with the amount that actually arrived) or reject with a reason; a receipt filed more than once is flagged. See [payments.md](payments.md). |
+| Payment settings | Owner only: the card and crypto addresses customers pay to, your crypto rates, and the top-up limits. |
 | Orders | Pending orders first. Confirm a card-to-card payment (with a confirmation step that shows who, what and how much), cancel an unpaid order, filter by status, and re-queue provisioning for a paid order that never received its service. |
 | Plans | List every plan including hidden and archived ones, create a plan, edit name, description, price and sort order, and switch between ACTIVE, HIDDEN and ARCHIVED. Existing customers are never affected: each order keeps its own snapshot of the plan. |
 | Users | Search by username, email or phone. Open an account to see its subscriptions, devices (active and revoked) and last 20 orders; remove a device; suspend, ban or reactivate the account; the owner can also grant or remove admin roles. |
@@ -70,6 +72,8 @@ OWNER passes every check.
 | Devices: remove a customer's device | ✓ | ✓ | | | ✓ |
 | Subscriptions: list | ✓ | ✓ | ✓ | | ✓ |
 | Audit log | ✓ | ✓ | | | |
+| Payments: review top-ups, adjust wallets | ✓ | ✓ | | ✓ | |
+| Payment settings (where money goes) | ✓ | | | | |
 | Grant or remove admin roles | ✓ | | | | |
 
 Rules on changing an account (`PATCH /api/v1/admin/users/{id}`):
