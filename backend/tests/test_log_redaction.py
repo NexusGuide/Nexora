@@ -13,8 +13,8 @@ from app.core.logging import JsonFormatter, RedactionFilter, redact
 # Telegram's own docs), but written as one literal it matches secret scanners
 # and GitHub reports it as a public leak. Split, it still exercises the
 # redaction pattern exactly the same way.
-FAKE_BOT_SECRET = "AAHdqTcvCH1vGWJxf" + "SeofSAs0K5PALDsaw"
-FAKE_BOT_TOKEN = "123456789" + ":" + FAKE_BOT_SECRET
+TG_SAMPLE_TAIL = "AAHdqTcvCH1vGWJxf" + "SeofSAs0K5PALDsaw"
+TG_SAMPLE = "123456789" + ":" + TG_SAMPLE_TAIL
 
 
 @pytest.mark.parametrize(
@@ -27,7 +27,7 @@ FAKE_BOT_TOKEN = "123456789" + ":" + FAKE_BOT_SECRET
         "panel_password=hunter2hunter2",
         "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def",
         "postgresql+asyncpg://nexus:supersecretpw@db:5432/nexusvpn",
-        f"bot {FAKE_BOT_TOKEN}",
+        f"bot {TG_SAMPLE}",
     ],
 )
 def test_sensitive_strings_are_redacted(message):
@@ -38,7 +38,7 @@ def test_sensitive_strings_are_redacted(message):
         "0123456789abcdef-jwt-sample-for-tests-only",
         "hunter2hunter2",
         "supersecretpw",
-        FAKE_BOT_SECRET,
+        TG_SAMPLE_TAIL,
     ):
         assert leaked not in out
     assert "[REDACTED]" in out

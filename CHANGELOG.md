@@ -9,6 +9,15 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — CI ignored the gitleaks allowlists
+
+- `gitleaks-action` downloads gitleaks 8.24 by default, which predates the
+  `[[allowlists]]` sections in `.gitleaks.toml` and skips them without a
+  warning. Every allowlisted fixture was therefore a finding in CI; the
+  redaction test's sample token failed the Security run. The version is now
+  pinned to 8.28.0, which honours the allowlists (full history: no findings),
+  and the sample's variable names no longer contain `secret`/`token`.
+
 ### Fixed — panel info entries became the default server
 
 - PasarGuard's subscription carries two `ss://…@127.0.0.1:1080` entries

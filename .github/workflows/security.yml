@@ -26,6 +26,11 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_CONFIG: .gitleaks.toml
+          # Pinned. The action's default (8.24.x) predates the [[allowlists]]
+          # syntax in .gitleaks.toml and ignores those sections silently, so a
+          # fixture in an allowlisted test file failed the build — and a run
+          # over the full history would have failed on every one of them.
+          GITLEAKS_VERSION: "8.28.0"
           # No GITLEAKS_LICENSE needed for a public repository.
 
   forbidden-files:
