@@ -82,7 +82,7 @@ async def test_same_idempotency_key_returns_the_same_order(session):
 
 
 async def test_different_keys_create_different_orders(session):
-    """A genuine second purchase must still be possible."""
+    """A genuine second purchase must still be possible once the first is paid."""
     user = await make_user(session)
     plan = await make_plan(session)
     service = OrderService(session)
@@ -90,6 +90,7 @@ async def test_different_keys_create_different_orders(session):
     first, _ = await service.create_order(
         user_id=user.id, plan_id=plan.id, client_idempotency_key="checkout-aaa-111"
     )
+    await service.mark_paid(first.id)
     await session.commit()
     second, created = await service.create_order(
         user_id=user.id, plan_id=plan.id, client_idempotency_key="checkout-bbb-222"
@@ -260,3 +261,38 @@ async def test_unpaid_order_cannot_be_provisioned(session):
     with pytest.raises(ConflictError) as exc:
         await SubscriptionService(session).create_from_order(order.id)
     assert exc.value.code == "ORDER_NOT_PAID"
+
+
+async def test_buying_again_while_unpaid_returns_the_waiting_order(session):
+    # Found on the first real purchase: "Buy" tapped twice left two PENDING
+    # orders for one payment, and nothing said which the money was for.
+    user = await make_user(session)
+    plan = await make_plan(session)
+    service = OrderService(session)
+
+    first, _ = await service.create_order(
+        user_id=user.id, plan_id=plan.id, client_idempotency_key="checkout-aaa-111"
+    )
+    await session.commit()
+    again, created = await service.create_order(
+        user_id=user.id, plan_id=plan.id, client_idempotency_key="checkout-bbb-222"
+    )
+
+    assert created is False
+    assert again.id == first.id
+
+
+async def test_a_cancelled_order_does_not_block_a_new_one(session):
+    user = await make_user(session)
+    plan = await make_plan(session)
+    service = OrderService(session)
+
+    first, _ = await service.create_order(user_id=user.id, plan_id=plan.id)
+    await service.cancel_order(first.id, user.id)
+    await session.commit()
+    second, created = await service.create_order(
+        user_id=user.id, plan_id=plan.id, client_idempotency_key="checkout-ccc-333"
+    )
+
+    assert created is True
+    assert second.id != first.id

@@ -97,6 +97,27 @@ class OrderService:
         if existing is not None:
             return existing, False
 
+        # One unpaid order per plan and target. Tapping "Buy" again while the
+        # first order waits for payment otherwise creates a second one — the
+        # client key is new each time — and the admin sees two orders for one
+        # purchase, with nothing saying which one the money was for. Once the
+        # order is paid or cancelled, the same plan can be ordered again.
+        waiting = await self.session.scalar(
+            select(Order)
+            .where(
+                Order.user_id == user_id,
+                Order.plan_id == plan_id,
+                Order.status == OrderStatus.PENDING,
+                Order.subscription_id.is_(None)
+                if subscription_id is None
+                else Order.subscription_id == subscription_id,
+            )
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        if waiting is not None:
+            return waiting, False
+
         order = Order(
             user_id=user_id,
             plan_id=plan_id,
@@ -166,7 +187,9 @@ class OrderService:
         return list(result)
 
     # ---------------------------------------------------------------- cancel
-    async def cancel_order(self, order_id: str, user_id: str) -> Order:
+    async def cancel_order(self, order_id: str, user_id: str | None) -> Order:
+        """Cancel an unpaid order. ``user_id`` scopes it to its owner; an
+        admin passes ``None``."""
         order = await self._lock_order(order_id, user_id)
         if order.status is not OrderStatus.PENDING:
             raise ConflictError(

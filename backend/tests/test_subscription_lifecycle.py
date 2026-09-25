@@ -277,3 +277,18 @@ async def test_order_status_after_full_flow(session):
     _, _, order, _ = await setup_subscription(session)
     assert order.status is OrderStatus.PAID
     assert order.completed_at is not None
+
+
+def test_days_remaining_rounds_up_a_part_day():
+    from datetime import UTC, datetime, timedelta
+
+    from app.schemas.billing import SubscriptionPublic
+
+    def days_left(delta):
+        now = datetime.now(UTC)
+        return SubscriptionPublic.model_construct(expire_at=now + delta).days_remaining
+
+    # Bought a minute ago: still the full 30 days, not 29.
+    assert days_left(timedelta(days=30) - timedelta(minutes=1)) == 30
+    assert days_left(timedelta(hours=3)) == 1
+    assert days_left(timedelta(seconds=-5)) == 0

@@ -9,6 +9,22 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — found on the first real purchase
+
+- **Two orders for one purchase.** Every tap on "Buy" sent a fresh client key,
+  so tapping twice left two PENDING orders and nothing said which one the
+  money was for. Ordering a plan while an unpaid order for the same plan (and
+  the same renewal target) is waiting now returns that order. Once it is paid
+  or cancelled, the plan can be bought again.
+- **A 30-day plan showed 29 days** a minute after purchase: `days_remaining`
+  floored with `timedelta.days`. It now rounds a part day up, and reaches 0
+  only once the subscription has actually expired.
+- `POST /api/v1/admin/orders/{id}/cancel` cancels an order nobody will pay
+  (PENDING only, audit-logged; a paid order needs a refund instead), and
+  `scripts/orders.sh` gains `x) cancel`.
+- The menus in `orders.sh` and `plans.sh` accept the same keys typed on a
+  Persian layout (ز for c, ق for r, …) instead of answering "Unknown choice".
+
 ### Added — confirming card-to-card payments
 
 - `GET /api/v1/admin/orders?order_status=PENDING` lists orders newest first

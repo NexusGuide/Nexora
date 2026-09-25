@@ -7,6 +7,7 @@ display, computed server-side so every client rounds the same way.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from decimal import Decimal
 
@@ -154,8 +155,12 @@ class SubscriptionPublic(BaseModel):
         expire_at = self.expire_at
         if expire_at.tzinfo is None:
             expire_at = expire_at.replace(tzinfo=UTC)
-        delta = expire_at - datetime.now(UTC)
-        return max(0, delta.days)
+        seconds = (expire_at - datetime.now(UTC)).total_seconds()
+        if seconds <= 0:
+            return 0
+        # Rounded up: a 30-day plan bought a minute ago has 30 days left, not
+        # the 29 that `timedelta.days` gives by flooring 29 days 23:59.
+        return math.ceil(seconds / 86400)
 
 
 class DevicePublic(BaseModel):

@@ -647,3 +647,31 @@ async def list_orders(
         ],
         request,
     )
+
+
+@router.post(
+    "/orders/{order_id}/cancel",
+    summary="Cancel an order nobody is going to pay for",
+)
+async def cancel_order(
+    order_id: str,
+    request: Request,
+    session: SessionDep,
+    admin: OrderAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
+):
+    """Only a PENDING order can be cancelled; a paid one needs a refund, which
+    is a different decision with money attached."""
+    from app.services.order_service import OrderService
+
+    order = await OrderService(session).cancel_order(order_id, None)
+    await PanelService(session).record_audit(
+        actor_id=admin.id,
+        action="order.cancel",
+        entity="order",
+        entity_id=order_id,
+        ip_address=ip,
+        metadata={"amount": str(order.amount)},
+    )
+    await session.commit()
+    return _envelope({"order_id": order_id, "status": order.status.value}, request)

@@ -27,6 +27,15 @@ fi
 red()   { printf '\033[0;31m%s\033[0m\n' "$*"; }
 green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
 dim()   { printf '\033[0;90m%s\033[0m\n' "$*"; }
+# The same key on a Persian layout, so a menu choice works without switching
+# the keyboard back to English first.
+latin_key() {
+    case "$1" in
+        ش) echo a ;; ز) echo c ;; ا) echo h ;; ق) echo r ;; س) echo s ;;
+        ض) echo q ;; ط) echo x ;; *) echo "$1" ;;
+    esac
+}
+
 jq_()   { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
 err_()  { python3 -c "
 import sys, json
@@ -115,6 +124,7 @@ while true; do
     echo
     dim "a) add   h) hide   s) show (make active)   r) retire (archive)   q) quit"
     printf '> '; read -r CHOICE
+    CHOICE=$(latin_key "$CHOICE")
     case "$CHOICE" in
         a) add_plan ;;
         h) set_status HIDDEN ;;
