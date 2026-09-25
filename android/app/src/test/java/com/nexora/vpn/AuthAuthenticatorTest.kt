@@ -250,4 +250,20 @@ class AuthAuthenticatorTest {
         assertEquals(1, sessionLostCount.get())
         assertEquals(0, server.requestCount)
     }
+
+    // --- sign-in is not a session -------------------------------------------
+
+    @Test
+    fun `a 401 on a request without a token does not end the session`() {
+        // Sign-in with a wrong password answers 401. That request carried no
+        // token, so there is no session to renew or to lose.
+        every { tokenStore.accessToken() } returns null
+        every { tokenStore.refreshToken() } returns null
+
+        val retry = authenticator().authenticate(null, response(withToken = null))
+
+        assertNull(retry)
+        assertEquals(0, sessionLostCount.get())
+        assertEquals(0, server.requestCount)
+    }
 }

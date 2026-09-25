@@ -79,10 +79,16 @@ object ApiCall {
         val requestId = envelope?.requestId
 
         return when (response.code()) {
-            401 -> AppError.Unauthorized(
-                code = error?.code ?: "UNAUTHORIZED",
-                message = error?.message,
-            )
+            // Wrong credentials also come back 401, but they are a refusal to
+            // show on the form, not a session to end.
+            401 -> if (error?.code == AppError.CODE_AUTH_FAILED) {
+                AppError.Rejected(code = AppError.CODE_AUTH_FAILED, message = error?.message)
+            } else {
+                AppError.Unauthorized(
+                    code = error?.code ?: "UNAUTHORIZED",
+                    message = error?.message,
+                )
+            }
 
             403, 409, 422, 400, 404, 429, 501, 503 -> AppError.Rejected(
                 code = error?.code ?: "REQUEST_REJECTED",

@@ -70,6 +70,12 @@ class AuthAuthenticator(
 
         val failedToken = response.request.header(HEADER_AUTH)?.removePrefix(BEARER)
 
+        // A request that carried no token was never signed in: sign-in and
+        // sign-up themselves. Their 401 is the answer — wrong password — not
+        // an expired session. Treating it as one ended the session and told
+        // the user "your session ended" for a mistyped password.
+        if (failedToken.isNullOrEmpty()) return null
+
         synchronized(lock) {
             val current = tokenStore.accessToken()
 

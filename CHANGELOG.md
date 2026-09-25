@@ -9,6 +9,16 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — a wrong password said "your session ended"
+
+- Sign-in with wrong credentials answers 401 `AUTHENTICATION_FAILED`. The app
+  treated every 401 as an expired session: the authenticator found no refresh
+  token and fired the session-lost handler, and the form showed "Your session
+  ended" instead of "Those details don't match an account". A 401 on a request
+  that carried no token is now left alone by the authenticator, and
+  `AUTHENTICATION_FAILED` is classified as a refusal to show on the form.
+  Found on the first sign-in from a real phone.
+
 ### Changed — CI actions on Node 24
 
 - GitHub is retiring Node 20 for actions. Every action is moved to the first
