@@ -9,6 +9,14 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Security
+
+- pytest 8.4.2 → 9.0.3 (Dependabot #1, moderate: predictable
+  `/tmp/pytest-of-{user}` directories on shared UNIX hosts). Development-only —
+  pytest is not in the production image. pytest-asyncio 1.2.0 → 1.3.0, the
+  first release that accepts pytest 9. All 196 tests pass; `pip-audit` on the
+  dev requirements reports nothing.
+
 ### Fixed — a wrong password said "your session ended"
 
 - Sign-in with wrong credentials answers 401 `AUTHENTICATION_FAILED`. The app
