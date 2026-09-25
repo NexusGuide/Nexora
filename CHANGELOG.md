@@ -9,6 +9,19 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Changed — CI actions on Node 24
+
+- GitHub is retiring Node 20 for actions. Every action is moved to the first
+  major that runs on Node 24 — checkout v5, setup-java v5, setup-python v6,
+  upload-artifact v6, download-artifact v7, gradle/actions v5, buildx v4,
+  build-push v7, gitleaks-action v3 — the smallest step that clears the
+  warning, not the newest major, to keep behaviour changes to a minimum.
+
+### Added
+
+- `scripts/plans.sh` lists, adds, hides, re-activates and archives plans
+  through the admin API, until the admin panel (phase 7) exists.
+
 ### Fixed — CI ignored the gitleaks allowlists
 
 - `gitleaks-action` downloads gitleaks 8.24 by default, which predates the
