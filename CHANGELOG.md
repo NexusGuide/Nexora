@@ -9,6 +9,15 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — panel info entries became the default server
+
+- PasarGuard's subscription carries two `ss://…@127.0.0.1:1080` entries
+  whose names are the username and "days / traffic left", so v2rayNG shows
+  them as text. They were stored as servers, and being first, one became the
+  customer's **default** config — a connection to nowhere. Configs whose host
+  is loopback, unspecified or `localhost` are now dropped. Found by the first
+  end-to-end purchase against the real panel (24 entries, 22 real).
+
 ### Fixed — migrations ran from a stale image
 
 - The `migrate` service has its own image. `docker compose up --build api

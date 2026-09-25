@@ -187,3 +187,22 @@ def test_accepts_a_plain_text_subscription_and_drops_noise():
 def test_an_html_error_page_yields_nothing():
     assert decode_subscription("<html><body>502 Bad Gateway</body></html>") == []
     assert decode_subscription("") == []
+
+
+def test_panel_info_entries_pointing_at_loopback_are_dropped():
+    # PasarGuard wraps real configs in ss:// entries at 127.0.0.1 whose name is
+    # the username or "days / traffic left". They must not become servers —
+    # the first of them used to be stored as the customer's default.
+    info_user = "ss://YWVzLTI1Ni1nY206eA@127.0.0.1:1080#nx_abc%20%7C%201"
+    info_quota = "ss://YWVzLTI1Ni1nY206eA@127.0.0.1:1080#12%20days%2C%206%20GB"
+    real = "vless://id@188.114.97.6:443?type=ws#Speed%20France"
+    body = _b64.b64encode("\n".join([info_user, real, info_quota]).encode()).decode()
+    assert decode_subscription(body) == [real]
+
+
+def test_unroutable_hosts_are_rejected_and_real_ones_kept():
+    assert not is_probably_config("vless://id@localhost:443#x")
+    assert not is_probably_config("trojan://pw@0.0.0.0:443#x")
+    assert not is_probably_config("vless://id@[::1]:443#x")
+    assert is_probably_config("vless://id@10.0.0.5:443#lan-is-still-routable")
+    assert is_probably_config("vless://id@example.com:443#x")

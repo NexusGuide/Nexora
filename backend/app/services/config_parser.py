@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import json
 import logging
 from dataclasses import dataclass
@@ -112,16 +113,38 @@ def parse_config_uri(uri: str) -> ParsedConfig:
         return ParsedConfig(name=f"{scheme} config"[:128], protocol=scheme[:32])
 
 
+def _is_unroutable(host: str | None) -> bool:
+    """A host no client can reach: loopback, unspecified, or empty."""
+    if not host:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_unspecified
+
+
 def is_probably_config(uri: str) -> bool:
-    """Whether a string looks like a config URI at all.
+    """Whether a string is a config URI a client could actually connect with.
 
     Panels sometimes include blank lines or a comment in their output; those
     should not become rows in the configs table.
+
+    Panels also add informational entries shaped like configs — PasarGuard puts
+    ``ss://...@127.0.0.1:1080#<username>`` and ``#<days left, traffic left>``
+    around the real ones so that v2rayNG shows the text as a server name. They
+    point at loopback and connect nowhere. Stored, the first of them became the
+    customer's *default* server. They are dropped here; the same information
+    comes from the subscription record itself.
     """
     uri = (uri or "").strip()
     if "://" not in uri or len(uri) < 12:
         return False
-    return uri.split("://", 1)[0].lower() in SUPPORTED_SCHEMES
+    if uri.split("://", 1)[0].lower() not in SUPPORTED_SCHEMES:
+        return False
+    return not _is_unroutable(parse_config_uri(uri).host)
 
 
 def decode_subscription(body: str) -> list[str]:
