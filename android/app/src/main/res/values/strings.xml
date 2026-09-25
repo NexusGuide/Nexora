@@ -34,6 +34,18 @@
     <string name="auth_invalid_credentials">Those details don\'t match an account</string>
     <string name="auth_account_locked">Too many attempts. Try again in a few minutes.</string>
     <string name="auth_account_inactive">This account is not active. Contact support.</string>
+    <string name="auth_sign_up">Create an account</string>
+    <string name="auth_username">Username</string>
+    <string name="auth_username_hint">Letters, numbers and underscore</string>
+    <string name="auth_email_optional">Email (optional, for password recovery)</string>
+    <string name="auth_confirm_password">Repeat password</string>
+    <string name="auth_have_account">Already have an account? Sign in</string>
+    <string name="auth_account_exists">An account with these details already exists</string>
+    <string name="auth_details_rejected">The server did not accept these details. Check them and try again.</string>
+    <string name="auth_strength_weak">Weak password</string>
+    <string name="auth_strength_fair">Fair password</string>
+    <string name="auth_strength_good">Good password</string>
+    <string name="auth_strength_strong">Strong password</string>
 
     <!-- Validation -->
     <string name="validation_required">This field is required</string>

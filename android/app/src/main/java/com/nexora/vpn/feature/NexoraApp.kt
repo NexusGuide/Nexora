@@ -29,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nexora.vpn.R
 import com.nexora.vpn.feature.auth.LoginScreen
+import com.nexora.vpn.feature.auth.RegisterScreen
 import com.nexora.vpn.feature.home.HomeScreen
 import com.nexora.vpn.feature.services.ServicesScreen
 import com.nexora.vpn.feature.store.StoreScreen
@@ -115,15 +116,13 @@ fun NexoraApp(viewModel: AppViewModel = hiltViewModel()) {
             }
 
             composable(Routes.REGISTER) {
-                // Registration reuses the login screen's flow for now; a
-                // dedicated screen lands with the onboarding pass.
-                LoginScreen(
+                RegisterScreen(
                     onSignedIn = {
                         navController.navigate(Routes.HOME) {
                             popUpTo(Routes.LOGIN) { inclusive = true }
                         }
                     },
-                    onRegister = { navController.popBackStack() },
+                    onBackToSignIn = { navController.popBackStack() },
                 )
             }
 

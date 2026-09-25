@@ -115,6 +115,9 @@ data class RegisterUiState(
     val confirmationError: Validation.Reason? = null,
     val emailError: Validation.Reason? = null,
     val error: AppError? = null,
+    /** Account created and signed in: go to the app. */
+    val signedIn: Boolean = false,
+    /** Account created but the automatic sign-in failed: go to sign-in. */
     val registered: Boolean = false,
 ) {
     val passwordStrength: Int get() = Validation.passwordStrength(password)
@@ -129,6 +132,7 @@ data class RegisterUiState(
 @HiltViewModel
 class RegisterViewModel @Inject constructor(
     private val register: RegisterUseCase,
+    private val signIn: SignInUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(RegisterUiState())
@@ -146,9 +150,13 @@ class RegisterViewModel @Inject constructor(
     fun onEmailChange(value: String) =
         _state.update { it.copy(email = value, emailError = null) }
 
+    fun dismissError() = _state.update { it.copy(error = null) }
+
     fun submit() {
         val current = _state.value
-        if (!current.isSubmitting && !validate(current)) return
+        // A second tap while the first request is in flight must not send a
+        // second registration.
+        if (current.isSubmitting || !validate(current)) return
 
         _state.update { it.copy(isSubmitting = true, error = null) }
 
@@ -160,8 +168,18 @@ class RegisterViewModel @Inject constructor(
                 phone = null,
             )
             when (result) {
-                is Outcome.Success ->
-                    _state.update { it.copy(isSubmitting = false, registered = true) }
+                is Outcome.Success -> {
+                    // Signing in straight away: nobody wants to type the
+                    // password they just chose a second time.
+                    val signedIn = signIn(current.username, current.password)
+                    _state.update {
+                        it.copy(
+                            isSubmitting = false,
+                            signedIn = signedIn is Outcome.Success,
+                            registered = signedIn !is Outcome.Success,
+                        )
+                    }
+                }
                 is Outcome.Failure ->
                     _state.update { it.copy(isSubmitting = false, error = result.error) }
             }

@@ -28,6 +28,18 @@
     <string name="auth_invalid_credentials">این مشخصات با هیچ حسابی مطابقت ندارد</string>
     <string name="auth_account_locked">تلاش‌های زیاد. چند دقیقه دیگر دوباره امتحان کنید.</string>
     <string name="auth_account_inactive">این حساب فعال نیست. با پشتیبانی تماس بگیرید.</string>
+    <string name="auth_sign_up">ساخت حساب</string>
+    <string name="auth_username">نام کاربری</string>
+    <string name="auth_username_hint">حروف انگلیسی، عدد و زیرخط</string>
+    <string name="auth_email_optional">ایمیل (اختیاری، برای بازیابی رمز)</string>
+    <string name="auth_confirm_password">تکرار رمز عبور</string>
+    <string name="auth_have_account">حساب دارید؟ وارد شوید</string>
+    <string name="auth_account_exists">حسابی با این مشخصات از قبل وجود دارد</string>
+    <string name="auth_details_rejected">سرور این مشخصات را نپذیرفت. آن‌ها را بررسی کنید و دوباره امتحان کنید.</string>
+    <string name="auth_strength_weak">رمز ضعیف</string>
+    <string name="auth_strength_fair">رمز متوسط</string>
+    <string name="auth_strength_good">رمز خوب</string>
+    <string name="auth_strength_strong">رمز قوی</string>
 
     <!-- Validation -->
     <string name="validation_required">این فیلد الزامی است</string>

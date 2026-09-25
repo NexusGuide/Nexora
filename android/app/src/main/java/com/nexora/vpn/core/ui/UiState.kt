@@ -37,6 +37,8 @@ fun AppError.messageRes(): Int = when (this) {
         "AUTHENTICATION_FAILED" -> R.string.auth_invalid_credentials
         "ACCOUNT_LOCKED" -> R.string.auth_account_locked
         "ACCOUNT_INACTIVE" -> R.string.auth_account_inactive
+        "ACCOUNT_EXISTS" -> R.string.auth_account_exists
+        "VALIDATION_ERROR" -> R.string.auth_details_rejected
         "DEVICE_LIMIT_REACHED" -> R.string.device_limit_title
         else -> R.string.error_unknown
     }

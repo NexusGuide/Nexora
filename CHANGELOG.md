@@ -9,6 +9,22 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — no account could be created from the app
+
+- The "Sign up" link opened a second copy of the sign-in form: the register
+  route rendered `LoginScreen` as a placeholder, and the `RegisterViewModel`
+  that already existed was never shown. Tapping the sign-in button there sent
+  a sign-in request, which is why a "sign-up" answered with wrong-credentials.
+  This was a fake feature and should not have shipped (spec rule 67).
+- `RegisterScreen` is the real form: username, optional email, password with
+  a strength meter, confirmation, field-level errors, and the email field no
+  longer lets the keyboard capitalise it. After creating the account the app
+  signs in straight away; if that step fails, it goes to sign-in instead.
+- `RegisterViewModel.submit()` let a second tap through while the first
+  request was still in flight. It no longer does.
+- `ACCOUNT_EXISTS` and server-side `VALIDATION_ERROR` now have messages of
+  their own instead of the generic one. English and Persian strings added.
+
 ### Fixed — an email with a capital letter could not sign in
 
 - Registration stored the email exactly as typed, while sign-in lowercases
