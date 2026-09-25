@@ -25,19 +25,31 @@ die()  { printf '\n\033[0;31merror\033[0m  %s\n' "$*" >&2; exit 1; }
 
 [ -f .env ] || die "No .env here. Run this from the deployment directory."
 DOMAIN=$(grep -E '^NEXUS_DOMAIN=' .env | tail -n1 | cut -d= -f2- | tr -d ' ')
+# The api rejects any Host it does not serve (TrustedHostMiddleware), so a
+# health check sent to 127.0.0.1 must still name a real host or it gets 400.
+HEALTH_HOST=$(grep -E '^ALLOWED_HOSTS=' .env | tail -n1 | cut -d= -f2- | cut -d, -f1 | tr -d ' ')
+HEALTH_HOST="${HEALTH_HOST:-${DOMAIN:-localhost}}"
 
 step "Pulling"
 git pull --ff-only
 
+# migrate has its own image, built from the same code as the api. It must be
+# rebuilt with the others: `docker compose up --build api worker scheduler`
+# does not touch it, and `docker compose run` reuses whatever image already
+# exists — so migrations ran from the first deployment's code, found no new
+# revision, and reported success while the new column was never created.
+step "Building images"
+docker compose build api worker scheduler migrate
+
 step "Applying migrations"
 docker compose run --rm migrate
 
-step "Rebuilding api, worker and scheduler"
-docker compose up -d --build api worker scheduler
+step "Restarting api, worker and scheduler on the new images"
+docker compose up -d api worker scheduler
 
 step "Waiting for the api"
 for i in $(seq 1 30); do
-    if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    if curl -fsS --max-time 2 -H "Host: $HEALTH_HOST" http://127.0.0.1:8000/health >/dev/null 2>&1; then
         ok "api healthy after ${i}s"
         break
     fi

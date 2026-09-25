@@ -161,6 +161,9 @@ ok "infrastructure/nginx/nginx.conf"
 
 # --- 5. Application ----------------------------------------------------------
 step "Building and starting the datastores"
+# migrate is built explicitly: `docker compose run` reuses an existing image,
+# so on a re-run it would otherwise migrate with the previous deployment's code.
+docker compose build api worker scheduler migrate
 docker compose up -d postgres redis
 docker compose run --rm migrate
 ok "migrations applied"

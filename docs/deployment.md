@@ -67,9 +67,10 @@ $EDITOR .env                                   # set the values listed above
 sed "s|\${NEXUS_DOMAIN}|api.your-domain.com|g" \
     infrastructure/nginx/nginx.conf.template > infrastructure/nginx/nginx.conf
 
+docker compose build api worker scheduler migrate
 docker compose up -d postgres redis
 docker compose run --rm migrate
-docker compose up -d --build api worker scheduler
+docker compose up -d api worker scheduler
 docker compose --profile full up -d nginx
 docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
     -d api.your-domain.com --email you@your-email.com --agree-tos --no-eff-email
@@ -143,6 +144,12 @@ only sometimes hands out a new address, this looks intermittent.
 
 Migrations run as a separate one-shot service, not on API startup: two API
 replicas starting together would otherwise race to migrate the same database.
+
+That service has **its own image**, and it must be rebuilt along with the api.
+`docker compose up --build api …` does not rebuild it, and `docker compose run
+migrate` reuses whatever image exists — so a hand-run migration after an update
+can silently use the first deployment's code, find no new revision, and report
+success while the schema stays old. `update.sh` builds all four images first.
 
 ## Secrets in production
 

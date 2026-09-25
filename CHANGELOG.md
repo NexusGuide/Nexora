@@ -9,6 +9,16 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — migrations ran from a stale image
+
+- The `migrate` service has its own image. `docker compose up --build api
+  worker scheduler` never rebuilt it, and `docker compose run --rm migrate`
+  reuses whatever image exists, so after an update the migrations ran from
+  the first deployment's code, found nothing new, and reported success while
+  the `default_group_ids` column was never created — every panel listing then
+  failed with `INTERNAL_ERROR`. `scripts/update.sh` and `scripts/deploy.sh`
+  now build `migrate` together with the other images before migrating.
+
 ### Added — building the Android app in CI
 
 - **The Gradle wrapper was missing.** `android/` carried
@@ -36,6 +46,22 @@ change it without a deprecation period.
   and not the match, because CI logs are public.
 - `backend.yml`: quoted the in-memory SQLite URL. A plain scalar ending in
   `:` is ambiguous YAML and strict parsers reject the file outright.
+
+### Fixed — health checks that could never pass in production
+
+`update.sh` waited for `http://127.0.0.1:8000/health` and gave up after 30
+seconds, although the api was up. In production `TrustedHostMiddleware` accepts
+only the deployment's own domain, and a request to `127.0.0.1` carries
+`Host: 127.0.0.1` — so it gets **400 Invalid host header**, every time.
+Reproduced against the application with production settings: 400 for
+`127.0.0.1`, 200 for the domain.
+
+The Dockerfile's `HEALTHCHECK` had the same flaw, so Docker has reported a
+healthy api container as *unhealthy* since the first deployment.
+
+Both now send the first entry of `ALLOWED_HOSTS` as the Host header. The
+middleware is left strict: allowing `localhost` would make a Host header an
+attacker controls acceptable to the application.
 
 ### Fixed — scripts reported a failed request as "no panel registered"
 
