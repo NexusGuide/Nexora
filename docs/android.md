@@ -138,6 +138,16 @@ secret-shaped values. It reads binaries with `strings`, not `grep` over text
 files, because a text-only scan of a DEX would pass unconditionally and prove
 nothing. On a hit it names the file and **not** the match: CI logs are public.
 
+#### A stable debug key
+
+A runner has no `~/.android/debug.keystore`, so without help every CI build is
+signed with a new throwaway key, and Android will not install an APK over one
+signed differently: each update would need an uninstall, losing the sign-in.
+Store a debug keystore, base64-encoded, as the repository **secret**
+`DEBUG_KEYSTORE_B64` (standard debug parameters: store and key password
+`android`, alias `androiddebugkey`) and the workflow signs with it. It is a
+debug key only; the release key never goes to CI.
+
 ### Locally
 
 ```bash

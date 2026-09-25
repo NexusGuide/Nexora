@@ -26,7 +26,11 @@ interface AuthRepository {
         phone: String?,
     ): Outcome<User>
 
-    suspend fun login(identifier: String, password: String): Outcome<User>
+    suspend fun login(
+        identifier: String,
+        password: String,
+        replaceDevice: String? = null,
+    ): Outcome<User>
 
     suspend fun logout(allDevices: Boolean = false)
 

@@ -88,6 +88,24 @@ jobs:
       - name: Make the wrapper executable
         run: chmod +x ./gradlew
 
+      # Every runner starts without ~/.android/debug.keystore, so Gradle made a
+      # new debug key for each build — and Android refuses to install an update
+      # signed with a different key. Each new APK then needed an uninstall,
+      # which also threw away the sign-in and the device id. A fixed debug key,
+      # kept as a secret, makes builds install over one another. It signs debug
+      # builds only; the release key is separate and never in CI.
+      - name: Use the project's debug signing key
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
+            echo "::warning::DEBUG_KEYSTORE_B64 is not set: this APK is signed with a throwaway key and will not install over a previous build."
+            exit 0
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$DEBUG_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+          echo "Signing with the project's debug key."
+
       # The Xray core is not in the repository. This downloads the release the
       # script pins and fails the build if its SHA-256 differs, so a changed or
       # tampered upstream file never reaches an APK.

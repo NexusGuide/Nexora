@@ -53,7 +53,11 @@ class LoginViewModel @Inject constructor(
         _state.update { it.copy(password = value, passwordError = null, error = null) }
     }
 
-    fun submit() {
+    /**
+     * Signs in. [replaceDevice] is one of the devices listed by a
+     * device-limit refusal, to sign out in favour of this one.
+     */
+    fun submit(replaceDevice: String? = null) {
         val current = _state.value
         if (!current.canSubmit) return
 
@@ -67,7 +71,7 @@ class LoginViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            when (val result = signIn(current.identifier, current.password)) {
+            when (val result = signIn(current.identifier, current.password, replaceDevice)) {
                 is Outcome.Success ->
                     _state.update { it.copy(isSubmitting = false, signedIn = true) }
 
@@ -89,7 +93,9 @@ class LoginViewModel @Inject constructor(
     }
 
     fun dismissError() {
-        _state.update { it.copy(error = null) }
+        // The device-limit dialog is drawn from deviceLimit, so clearing only
+        // the error left it on screen with a Close button that did nothing.
+        _state.update { it.copy(error = null, deviceLimit = null, registeredDevices = emptyList()) }
     }
 
     /** Used by the reset-password entry point, which needs no session. */

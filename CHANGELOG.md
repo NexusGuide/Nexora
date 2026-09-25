@@ -9,6 +9,25 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — locked out by your own phone
+
+- **Every CI build had a different signing key.** Runners start without a
+  debug keystore, so Gradle generated one per build, and Android will not
+  install an update signed with another key. Each new APK needed an uninstall,
+  which also discarded the device id — so the phone came back as a *second*
+  device and, on a one-device plan, could not sign in at all. The workflow now
+  signs with a fixed debug key from the `DEBUG_KEYSTORE_B64` secret, and warns
+  when it is missing.
+- **Sign-in can replace a listed device.** At the device limit the dialog
+  lists the devices holding the slots; each now has "Sign it out and use this
+  phone". The backend honours `replace_device` only after the password has
+  been verified, only for the user's own device, and ends that device's
+  sessions in the same step.
+- Revoking a device now always ends its sessions — the rule moved into
+  `DeviceService.revoke`, so every path that revokes gets it.
+- The device-limit dialog's Close button did nothing: it cleared the error but
+  the dialog was drawn from a different field.
+
 ### Added — phase 5: the VPN engine
 
 - **Connect works.** The Android app runs the Xray core

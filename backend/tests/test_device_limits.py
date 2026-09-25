@@ -216,3 +216,90 @@ async def test_login_without_a_device_id_is_unaffected(session):
     result = await auth.login(LoginRequest(identifier="buyer", password=PASSWORD))
     await session.commit()
     assert result.tokens.access_token
+
+
+# --- replacing a device at sign-in ---------------------------------------------
+# Found on a real phone: a reinstall gets a new device id, and the old install
+# held the only slot, so the owner of both could not sign in anywhere.
+async def test_sign_in_can_replace_a_listed_device(session):
+    from sqlalchemy import select
+
+    from app.models.user import RefreshToken, UserDevice
+
+    user = await make_user(session)
+    await give_subscription(session, user, device_limit=1)
+    auth = AuthService(session)
+    await auth.login(LoginRequest(identifier="buyer", password=PASSWORD, device_id="old"))
+    await session.commit()
+
+    with pytest.raises(DeviceLimitReachedError) as refused:
+        await auth.login(
+            LoginRequest(identifier="buyer", password=PASSWORD, device_id="new")
+        )
+    await session.rollback()
+    old_row = refused.value.details["devices"][0]["id"]
+
+    result = await auth.login(
+        LoginRequest(
+            identifier="buyer", password=PASSWORD, device_id="new", replace_device=old_row
+        )
+    )
+    await session.commit()
+    assert result.tokens.access_token
+
+    old = await session.get(UserDevice, old_row)
+    assert old.status is DeviceStatus.REVOKED
+    # The replaced install's sessions end with it.
+    live = await session.scalars(
+        select(RefreshToken).where(
+            RefreshToken.device_id == "old", RefreshToken.revoked_at.is_(None)
+        )
+    )
+    assert list(live) == []
+
+
+async def test_a_wrong_password_cannot_replace_a_device(session):
+    from app.core.exceptions import AuthenticationError
+    from app.models.user import UserDevice
+
+    user = await make_user(session)
+    await give_subscription(session, user, device_limit=1)
+    auth = AuthService(session)
+    await auth.login(LoginRequest(identifier="buyer", password=PASSWORD, device_id="old"))
+    await session.commit()
+    old_row = (await DeviceService(session).active_devices(user.id))[0].id
+
+    with pytest.raises(AuthenticationError):
+        await auth.login(
+            LoginRequest(
+                identifier="buyer",
+                password="Wrong-Passw0rd-for-tests-only",
+                device_id="new",
+                replace_device=old_row,
+            )
+        )
+    await session.rollback()
+    assert (await session.get(UserDevice, old_row)).status is DeviceStatus.ACTIVE
+
+
+async def test_another_users_device_cannot_be_replaced(session):
+    from app.core.exceptions import NotFoundError
+
+    victim = await make_user(session, username="victim")
+    await give_subscription(session, victim, device_limit=1)
+    auth = AuthService(session)
+    await auth.login(LoginRequest(identifier="victim", password=PASSWORD, device_id="v"))
+    await session.commit()
+    victim_row = (await DeviceService(session).active_devices(victim.id))[0].id
+
+    attacker = await make_user(session, username="attacker")
+    await give_subscription(session, attacker, device_limit=1)
+    with pytest.raises(NotFoundError):
+        await auth.login(
+            LoginRequest(
+                identifier="attacker",
+                password=PASSWORD,
+                device_id="a",
+                replace_device=victim_row,
+            )
+        )

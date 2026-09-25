@@ -64,6 +64,7 @@
     <!-- Device limit -->
     <string name="device_limit_title">Device limit reached</string>
     <string name="device_limit_body">Your plan allows %1$d device(s). Remove one to sign in here.</string>
+    <string name="device_limit_replace">Sign it out and use this phone</string>
 
     <!-- Navigation -->
     <string name="nav_home">Home</string>

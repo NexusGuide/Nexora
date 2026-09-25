@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Request, status
 from sqlalchemy import func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.enums import DeviceStatus
-from app.models.user import RefreshToken, User, UserDevice
+from app.models.user import User, UserDevice
 from app.schemas.auth import UserPublic
 from app.schemas.billing import DevicePublic, UserUpdate
 from app.schemas.common import SuccessResponse
@@ -97,23 +95,9 @@ async def revoke_device(
 ):
     # Revoked rather than deleted: the row is evidence of where an account has
     # been used, which matters when a user reports a compromise.
+    # The service also ends the sessions bound to that device.
     device = await DeviceService(session).revoke(user.id, device_id)
     if device is None:
         raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
-
-    # Kill the sessions bound to that device in the same step, or "revoke"
-    # would leave a working refresh token behind.
-    tokens = await session.scalars(
-        select(RefreshToken).where(
-            RefreshToken.user_id == user.id,
-            RefreshToken.device_id == device.device_id,
-            RefreshToken.revoked_at.is_(None),
-        )
-    )
-    now = datetime.now(UTC)
-    for token in tokens:
-        token.revoked_at = now
-        token.revoked_reason = "device_revoked"
-
     await session.commit()
     return _envelope({"revoked": True, "device_id": device_id}, request)

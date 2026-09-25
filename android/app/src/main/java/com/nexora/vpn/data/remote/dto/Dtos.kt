@@ -46,6 +46,8 @@ data class LoginRequestDto(
     @SerialName("device_id") val deviceId: String? = null,
     @SerialName("device_name") val deviceName: String? = null,
     @SerialName("app_version") val appVersion: String? = null,
+    /** At the device limit: one of the listed devices to sign out in favour of this one. */
+    @SerialName("replace_device") val replaceDevice: String? = null,
 )
 
 @Serializable

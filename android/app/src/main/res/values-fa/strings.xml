@@ -58,6 +58,7 @@
     <!-- Device limit -->
     <string name="device_limit_title">به سقف دستگاه‌ها رسیدید</string>
     <string name="device_limit_body">پلن شما %1$d دستگاه را پشتیبانی می‌کند. برای ورود از اینجا، یکی را حذف کنید.</string>
+    <string name="device_limit_replace">خارجش کن و با این گوشی وارد شو</string>
 
     <!-- Navigation -->
     <string name="nav_home">خانه</string>

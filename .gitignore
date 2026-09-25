@@ -28,6 +28,8 @@ google-services.json
 *.pfx
 *.jks
 *.keystore
+# A keystore encoded for a CI secret is the same key in another form.
+*.base64.txt
 *.crt
 *.cer
 *.der

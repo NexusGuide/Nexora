@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AppError
 from app.models.billing import Subscription
 from app.models.enums import DeviceStatus, SubscriptionStatus
-from app.models.user import UserDevice
+from app.models.user import RefreshToken, UserDevice
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +132,29 @@ class DeviceService:
         return device
 
     async def revoke(self, user_id: str, device_row_id: str) -> UserDevice | None:
+        """Revoke one of the user's devices and end every session bound to it.
+
+        Both in one step: revoking the row but leaving its refresh token
+        working would let the "removed" device carry on as if nothing happened.
+        """
         device = await self.session.get(UserDevice, device_row_id)
         if device is None or device.user_id != user_id:
             return None
+        now = datetime.now(UTC)
         device.status = DeviceStatus.REVOKED
-        device.last_seen_at = datetime.now(UTC)
+        device.last_seen_at = now
+
+        tokens = await self.session.scalars(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.device_id == device.device_id,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+        for token in tokens:
+            token.revoked_at = now
+            token.revoked_reason = "device_revoked"
+
         await self.session.flush()
         return device
 

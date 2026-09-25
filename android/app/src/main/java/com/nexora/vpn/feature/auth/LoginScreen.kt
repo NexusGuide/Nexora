@@ -156,6 +156,11 @@ fun LoginScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = Spacing.xs),
                         )
+                        // A reinstall on the same phone shows up here as the
+                        // old install; this is how the owner gets back in.
+                        TextButton(onClick = { viewModel.submit(replaceDevice = device.id) }) {
+                            Text(stringResource(R.string.device_limit_replace))
+                        }
                     }
                 }
             },

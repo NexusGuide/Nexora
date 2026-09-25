@@ -20,6 +20,7 @@ from app.core.exceptions import (
     AccountLockedError,
     AuthenticationError,
     ConflictError,
+    NotFoundError,
     TokenInvalidError,
 )
 from app.core.security import (
@@ -330,7 +331,16 @@ class AuthService:
         credentials were correct, so the user must be told what is wrong rather
         than shown a generic failure.
         """
-        await DeviceService(self.session).register(
+        devices = DeviceService(self.session)
+        if payload.replace_device:
+            # A reinstall gets a new device id, so the same phone can find its
+            # old self holding the only slot. Signing that one out from here
+            # is what the device list offers anyway; the password has already
+            # been verified by the time this runs.
+            replaced = await devices.revoke(user.id, payload.replace_device)
+            if replaced is None:
+                raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
+        await devices.register(
             user.id,
             device_id=payload.device_id or "",
             device_name=payload.device_name,

@@ -80,6 +80,9 @@ class LoginRequest(BaseModel):
     device_id: str | None = Field(default=None, max_length=128)
     device_name: str | None = Field(default=None, max_length=128)
     app_version: str | None = Field(default=None, max_length=32)
+    # At the device limit, the id of one of the listed devices to sign out in
+    # favour of this one. Only honoured once the password has been checked.
+    replace_device: str | None = Field(default=None, max_length=36)
 
 
 class RefreshRequest(BaseModel):

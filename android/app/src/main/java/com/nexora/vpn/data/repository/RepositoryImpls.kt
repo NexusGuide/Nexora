@@ -53,7 +53,11 @@ class AuthRepositoryImpl @Inject constructor(
         )
     }.map { it.toDomain() }
 
-    override suspend fun login(identifier: String, password: String): Outcome<User> {
+    override suspend fun login(
+        identifier: String,
+        password: String,
+        replaceDevice: String?,
+    ): Outcome<User> {
         val result = ApiCall {
             api.login(
                 LoginRequestDto(
@@ -62,6 +66,7 @@ class AuthRepositoryImpl @Inject constructor(
                     deviceId = deviceIdentity.deviceId(),
                     deviceName = deviceIdentity.deviceName(),
                     appVersion = deviceIdentity.appVersion(),
+                    replaceDevice = replaceDevice,
                 ),
             )
         }

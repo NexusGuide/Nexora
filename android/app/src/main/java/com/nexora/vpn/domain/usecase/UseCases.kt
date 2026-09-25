@@ -27,7 +27,11 @@ import javax.inject.Inject
 class SignInUseCase @Inject constructor(
     private val authRepository: AuthRepository,
 ) {
-    suspend operator fun invoke(identifier: String, password: String): Outcome<User> {
+    suspend operator fun invoke(
+        identifier: String,
+        password: String,
+        replaceDevice: String? = null,
+    ): Outcome<User> {
         // Checked locally first: a round trip to be told the field is empty is
         // a slow way to say something instant.
         if (Validation.loginIdentifier(identifier) is Validation.Check.Invalid) {
@@ -40,7 +44,7 @@ class SignInUseCase @Inject constructor(
                 AppError.Rejected("VALIDATION_ERROR", "Enter your password"),
             )
         }
-        return authRepository.login(identifier, password)
+        return authRepository.login(identifier, password, replaceDevice)
     }
 }
 
