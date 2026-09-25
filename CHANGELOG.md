@@ -9,6 +9,44 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — the web admin panel
+
+- **`https://<api domain>/admin`**: a browser panel for the operator, in
+  Persian, dark, usable from a phone. Dashboard with real counts (users,
+  active subscriptions, pending orders, 30-day revenue per currency, panels
+  reachable at their last test), orders (confirm payment, cancel, filter),
+  plans (create, edit, activate/hide/archive), users (search, details,
+  suspend/activate, revoke a device), subscriptions, panels (test, choose
+  default groups), servers, and the audit log. It replaces the shell
+  scripts, which stay for emergencies.
+- New admin API: `GET /me`, `/stats`, `/users`, `/users/{id}`,
+  `PATCH /users/{id}`, `DELETE /users/{id}/devices/{row}`, `/subscriptions`,
+  `/audit`. Role sets live in one table (`app/api/admin_roles.py`) read by both
+  the route guards and `/me`, so the buttons the UI shows cannot drift from
+  what the server allows. Nobody can change their own account; only OWNER
+  changes roles; the last OWNER cannot be demoted or suspended; suspending or
+  banning ends every session of that user.
+- `POST /admin/subscriptions/{id}/reprovision` now writes an audit entry; it
+  did not.
+- Security: plain HTML/CSS/JS with no build step and no third-party code,
+  served with a strict CSP (`script-src 'self'`, no inline scripts, no
+  framing). Every value is inserted as text, never as HTML; a test fails the
+  build if `innerHTML`, `eval` or inline handlers appear. Signing in to the
+  panel registers no device. 42 tests; 255 in total.
+- Deliberately absent, because nothing real stands behind them yet: server
+  load and health, charts, refunds.
+
+### Fixed — "Could not start the connection" on every server
+
+- The core could not open its routing data. The configuration routes by
+  `geoip:ir` and `geosite:category-ir`; the library reads those files out of
+  the APK only after `go.Seq.setContext` has been called, and it had not been,
+  so the core refused every configuration. The app now sets the context and
+  copies `geoip.dat` and `geosite.dat` into its files directory (once per core
+  version), so the files are read from disk.
+- The error dialog now shows the underlying message under the explanation, so
+  the next failure can be reported exactly instead of guessed at.
+
 ### Changed — reinstalling no longer makes a phone a new device
 
 - The device id is now a SHA-256 of `ANDROID_ID` with an app-specific prefix,

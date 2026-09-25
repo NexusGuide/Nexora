@@ -47,6 +47,18 @@ class PlanPublic(BaseModel):
         return round(self.traffic_limit_bytes / BYTES_PER_GB, 2)
 
 
+class PlanAdminPublic(PlanPublic):
+    """A plan as the admin API returns it.
+
+    Adds the fields only an operator needs — the store ordering and when the
+    plan was created — without widening the public store response the app
+    parses.
+    """
+
+    sort_order: int
+    created_at: datetime
+
+
 class PlanCreate(BaseModel):
     """Admin input for creating a purchasable plan.
 

@@ -87,7 +87,21 @@ fun HomeScreen(
     state.vpnError?.let { reason ->
         AlertDialog(
             onDismissRequest = viewModel::dismissVpnError,
-            text = { Text(stringResource(reason.messageRes())) },
+            text = {
+                Column {
+                    Text(stringResource(reason.messageRes()))
+                    // The underlying message, small: what to send when
+                    // reporting the problem.
+                    state.vpnErrorDetail?.let { detail ->
+                        Text(
+                            text = detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = Spacing.sm),
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = viewModel::dismissVpnError) {
                     Text(stringResource(R.string.action_close))

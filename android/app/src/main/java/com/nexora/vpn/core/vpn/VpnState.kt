@@ -18,7 +18,12 @@ sealed interface VpnState {
 
     data object Disconnecting : VpnState
 
-    data class Failed(val reason: Reason) : VpnState
+    /**
+     * [detail] is the underlying message — the core's own, for instance —
+     * shown under the explanation so a failure can be reported precisely
+     * instead of guessed at. It never contains the configuration itself.
+     */
+    data class Failed(val reason: Reason, val detail: String? = null) : VpnState
 
     enum class Reason {
         /** The share link is in a form the core cannot run. */

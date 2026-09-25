@@ -2,6 +2,7 @@ package com.nexora.vpn.core.vpn
 
 import android.content.Context
 import android.util.Log
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
@@ -26,16 +27,59 @@ internal object XrayCore {
     @Volatile
     private var controller: CoreController? = null
 
+    /** The routing data files the configuration refers to (geoip:, geosite:). */
+    private val GEO_FILES = listOf("geoip.dat", "geosite.dat")
+
     /**
-     * Points the core at a directory for its data files. `geoip.dat` and
-     * `geosite.dat` are not copied there: when a file is missing the library
-     * reads it straight from the APK's assets, which is where the AAR put them.
+     * Prepares the core: gives Go the Android context, and puts the routing
+     * data files where it will look for them.
+     *
+     * Both were missing in the first build, and every connection failed with
+     * "could not start": the configuration routes by `geoip:ir` and
+     * `geosite:category-ir`, the core could not open those files, and it
+     * refused the configuration. The library's fallback — reading them out of
+     * the APK — only works once `Seq.setContext` has been called; copying them
+     * to a real directory removes the dependency on that fallback altogether.
      */
     fun init(context: Context) {
-        if (initialised.getAndSet(true)) return
-        val dir = context.applicationContext.filesDir.resolve("xray").apply { mkdirs() }
-        Libv2ray.initCoreEnv(dir.absolutePath, "")
-        Log.i(TAG, Libv2ray.checkVersionX())
+        if (initialised.get()) return
+        synchronized(this) {
+            if (initialised.get()) return
+            val app = context.applicationContext
+            go.Seq.setContext(app)
+            val dir = app.filesDir.resolve("xray").apply { mkdirs() }
+            copyGeoFiles(app, dir)
+            Libv2ray.initCoreEnv(dir.absolutePath, "")
+            Log.i(TAG, Libv2ray.checkVersionX())
+            initialised.set(true)
+        }
+    }
+
+    /**
+     * Copies the geo files out of the APK when they are missing or came with
+     * another core version. About 28 MB, once per install or core update.
+     */
+    private fun copyGeoFiles(context: Context, dir: File) {
+        // Keyed to the core's own version string: the files ship inside the
+        // core's AAR, so they change exactly when it does. (The app's
+        // versionCode stays the same across debug builds.)
+        val version = Libv2ray.checkVersionX()
+        val stamp = File(dir, ".geo-version")
+        val upToDate = stamp.exists() && stamp.readText() == version &&
+            GEO_FILES.all { File(dir, it).length() > 0 }
+        if (upToDate) return
+
+        for (name in GEO_FILES) {
+            val target = File(dir, name)
+            val partial = File(dir, "$name.part")
+            context.assets.open(name).use { input ->
+                partial.outputStream().use { output -> input.copyTo(output) }
+            }
+            // Renamed into place, so a copy interrupted half way is never
+            // mistaken for a complete file.
+            check(partial.renameTo(target)) { "could not move $name into place" }
+        }
+        stamp.writeText(version)
     }
 
     /**

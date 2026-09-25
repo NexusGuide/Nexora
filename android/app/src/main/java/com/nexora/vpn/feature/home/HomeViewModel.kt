@@ -30,6 +30,7 @@ data class HomeUiState(
     val connectedSinceMs: Long? = null,
     val pingMs: Int? = null,
     val vpnError: VpnState.Reason? = null,
+    val vpnErrorDetail: String? = null,
 ) {
     val primary: Subscription?
         get() = (subscription as? UiState.Content)?.data
@@ -78,6 +79,7 @@ class HomeViewModel @Inject constructor(
             connection = ConnectionState.ERROR,
             connectedSinceMs = null,
             vpnError = vpnState.reason,
+            vpnErrorDetail = vpnState.detail,
         )
     }
 
@@ -102,7 +104,7 @@ class HomeViewModel @Inject constructor(
     fun onPermissionDenied() =
         _state.update { it.copy(vpnError = VpnState.Reason.PERMISSION_DENIED) }
 
-    fun dismissVpnError() = _state.update { it.copy(vpnError = null) }
+    fun dismissVpnError() = _state.update { it.copy(vpnError = null, vpnErrorDetail = null) }
 
     private fun measurePing() {
         val config = _state.value.activeConfig ?: return

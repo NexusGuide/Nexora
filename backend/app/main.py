@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api import admin_web
 from app.api.middleware import (
     RateLimitMiddleware,
     RequestContextMiddleware,
@@ -25,6 +26,7 @@ from app.api.middleware import (
 from app.api.queue import close_queue
 from app.api.rate_limit import close_limiter
 from app.api.v1 import admin as admin_routes
+from app.api.v1 import admin_panel as admin_panel_routes
 from app.api.v1 import auth as auth_routes
 from app.api.v1 import configs as config_routes
 from app.api.v1 import health as health_routes
@@ -179,6 +181,10 @@ app.include_router(user_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(store_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(config_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_panel_routes.router, prefix=settings.api_v1_prefix)
+# The browser admin panel. Its routes set their own CSP, which the security
+# middleware leaves in place; see app/api/admin_web.py.
+app.include_router(admin_web.router)
 
 
 @app.get("/metrics", include_in_schema=False)

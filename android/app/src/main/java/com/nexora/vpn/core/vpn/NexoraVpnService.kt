@@ -38,6 +38,9 @@ class NexoraVpnService : VpnService() {
 
     private var tun: ParcelFileDescriptor? = null
 
+    /** Why establish() failed, when it threw rather than returning null. */
+    private var interfaceError: String? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CONNECT -> {
@@ -64,16 +67,18 @@ class NexoraVpnService : VpnService() {
         }
         // Switching servers: the old tunnel goes first.
         teardown()
+        interfaceError = null
 
         val descriptor = try {
             buildInterface(pending.serverName)
         } catch (e: Exception) {
             Log.w(TAG, "establish failed", e)
+            interfaceError = e.message
             null
         }
         if (descriptor == null) {
             // establish() returns null when the permission was withdrawn.
-            disconnect(VpnState.Failed(VpnState.Reason.INTERFACE_FAILED))
+            disconnect(VpnState.Failed(VpnState.Reason.INTERFACE_FAILED, interfaceError))
             return
         }
         tun = descriptor
@@ -82,7 +87,7 @@ class NexoraVpnService : VpnService() {
             XrayCore.start(this, pending.configJson, descriptor.fd)
         } catch (e: Exception) {
             Log.w(TAG, "core failed to start: ${e.message}")
-            disconnect(VpnState.Failed(VpnState.Reason.CORE_FAILED))
+            disconnect(VpnState.Failed(VpnState.Reason.CORE_FAILED, e.message?.take(300)))
             return
         }
 

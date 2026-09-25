@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import func, select
 
+from app.api.admin_roles import roles_for
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
 from app.core.exceptions import (
@@ -35,8 +36,8 @@ from app.schemas.billing import (
     PanelGroupPublic,
     PanelGroupsUpdate,
     PanelPublic,
+    PlanAdminPublic,
     PlanCreate,
-    PlanPublic,
     PlanUpdate,
     ServerCreate,
     ServerPublic,
@@ -50,9 +51,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Panels hold the credentials to the whole fleet, so only these two roles may
 # touch them — Support and Finance have no business here.
-PanelAdmin = Annotated[
-    User, Depends(require_roles(AdminRole.MANAGER, AdminRole.DEVELOPER))
-]
+# The sets live in app.api.admin_roles so GET /admin/me can describe them to
+# the web panel from the same source the guards use.
+PanelAdmin = Annotated[User, Depends(require_roles(*roles_for("panels")))]
 
 
 def _envelope(data, request: Request):
@@ -296,6 +297,7 @@ async def reprovision(
     request: Request,
     session: SessionDep,
     admin: PanelAdmin,
+    ip: Annotated[str | None, Depends(client_ip)],
 ):
     """Re-run config fetch for a subscription stuck after a panel outage."""
     from app.models.billing import Subscription
@@ -303,6 +305,17 @@ async def reprovision(
     subscription = await session.get(Subscription, subscription_id)
     if subscription is None:
         raise NotFoundError("Subscription not found", code="SUBSCRIPTION_NOT_FOUND")
+
+    # Audited like every other admin write, now that the web panel puts this
+    # behind a button rather than a hand-typed curl.
+    await PanelService(session).record_audit(
+        actor_id=admin.id,
+        action="subscription.refresh_configs",
+        entity="subscription",
+        entity_id=subscription_id,
+        ip_address=ip,
+    )
+    await session.commit()
 
     queue = build_queue(get_settings().redis_url)
     try:
@@ -323,7 +336,7 @@ async def confirm_manual_payment(
     order_id: str,
     request: Request,
     session: SessionDep,
-    admin: Annotated[User, Depends(require_roles(AdminRole.MANAGER, AdminRole.FINANCE))],
+    admin: Annotated[User, Depends(require_roles(*roles_for("orders")))],
     ip: Annotated[str | None, Depends(client_ip)],
 ):
     """Mark an order paid for a card-to-card or other offline payment.
@@ -493,15 +506,12 @@ async def bootstrap_owner(
 # ------------------------------------------------------------------- plans
 # Pricing is a commercial decision, so Finance may set it as well as the
 # operators who run the fleet. Support may not.
-PlanAdmin = Annotated[
-    User,
-    Depends(require_roles(AdminRole.MANAGER, AdminRole.DEVELOPER, AdminRole.FINANCE)),
-]
+PlanAdmin = Annotated[User, Depends(require_roles(*roles_for("plans")))]
 
 
 @router.post(
     "/plans",
-    response_model=SuccessResponse[PlanPublic],
+    response_model=SuccessResponse[PlanAdminPublic],
     status_code=status.HTTP_201_CREATED,
     summary="Create a plan",
 )
@@ -540,23 +550,23 @@ async def create_plan(
         metadata={"name": plan.name, "price": str(plan.price)},
     )
     await session.commit()
-    return _envelope(PlanPublic.model_validate(plan), request)
+    return _envelope(PlanAdminPublic.model_validate(plan), request)
 
 
 @router.get(
     "/plans",
-    response_model=SuccessResponse[list[PlanPublic]],
+    response_model=SuccessResponse[list[PlanAdminPublic]],
     summary="List every plan, including inactive ones",
 )
 async def list_all_plans(request: Request, session: SessionDep, admin: PlanAdmin):
     """Unlike the store listing, this shows plans that are not on sale."""
     plans = await session.scalars(select(Plan).order_by(Plan.sort_order, Plan.price))
-    return _envelope([PlanPublic.model_validate(p) for p in plans], request)
+    return _envelope([PlanAdminPublic.model_validate(p) for p in plans], request)
 
 
 @router.patch(
     "/plans/{plan_id}",
-    response_model=SuccessResponse[PlanPublic],
+    response_model=SuccessResponse[PlanAdminPublic],
     summary="Change a plan's price, name or availability",
 )
 async def update_plan(
@@ -593,11 +603,11 @@ async def update_plan(
         metadata={k: str(v) for k, v in changed.items()},
     )
     await session.commit()
-    return _envelope(PlanPublic.model_validate(plan), request)
+    return _envelope(PlanAdminPublic.model_validate(plan), request)
 
 
 # -------------------------------------------------------------------- orders
-OrderAdmin = Annotated[User, Depends(require_roles(AdminRole.MANAGER, AdminRole.FINANCE))]
+OrderAdmin = Annotated[User, Depends(require_roles(*roles_for("orders")))]
 
 
 @router.get(

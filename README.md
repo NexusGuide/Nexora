@@ -214,7 +214,7 @@ database server.
 | 4 | Android app: login, home, services, store | **Done** (builds in CI) |
 | 5 | VPN engine (Xray core), connect, ping | **In progress**: connect, ping, notification; traffic stats pending |
 | 6 | Payment, renewal, expiration, notifications | Not started |
-| 7 | Admin panel, RBAC, logs, analytics | Not started |
+| 7 | Admin panel, RBAC, logs, analytics | **Web panel done** (`/admin`); analytics pending |
 | 8 | Multi-panel (X-UI, Marzban), auto server | Not started |
 
 ## Documentation
@@ -225,6 +225,7 @@ database server.
 - [panel-adapters.md](docs/panel-adapters.md)
 - [workers.md](docs/workers.md)
 - [android.md](docs/android.md)
+- [admin-panel.md](docs/admin-panel.md)
 - [contributing.md](docs/contributing.md)
 
 ## License
