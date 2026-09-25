@@ -51,6 +51,14 @@ class RegisterRequest(BaseModel):
             )
         return v.lower()
 
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, v: EmailStr | None) -> str | None:
+        # Addresses are matched case-insensitively at sign-in. Stored as typed,
+        # "Mehdi@gmail.com" could never sign in as "mehdi@gmail.com" — and a
+        # phone keyboard capitalises the first letter on its own.
+        return str(v).strip().lower() if v else None
+
     @field_validator("phone")
     @classmethod
     def _check_phone(cls, v: str | None) -> str | None:

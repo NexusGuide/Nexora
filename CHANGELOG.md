@@ -9,6 +9,16 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Fixed — an email with a capital letter could not sign in
+
+- Registration stored the email exactly as typed, while sign-in lowercases
+  what it is given before looking it up. A phone keyboard capitalises the
+  first letter of a field on its own, so "Mehdi…@gmail.com" registered and
+  "mehdi…@gmail.com" was then refused as wrong credentials. Emails are now
+  stored lowercase, and every lookup — sign-in, password reset, the duplicate
+  check, profile updates, the admin bootstrap — compares case-insensitively,
+  so accounts created before this change sign in too. No migration needed.
+
 ### Security
 
 - pytest 8.4.2 → 9.0.3 (Dependabot #1, moderate: predictable

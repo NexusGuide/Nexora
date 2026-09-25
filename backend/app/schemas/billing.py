@@ -179,6 +179,11 @@ class UserUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=32)
 
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, v: str | None) -> str | None:
+        return v.strip().lower() if v else v
+
 
 class ConfigPublic(BaseModel):
     """A config as returned to its owner.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.exceptions import ConflictError, NotFoundError
@@ -46,7 +46,7 @@ async def update_me(
 
     clauses = []
     if payload.email is not None:
-        clauses.append(User.email == payload.email)
+        clauses.append(func.lower(User.email) == payload.email)
     if payload.phone is not None:
         clauses.append(User.phone == payload.phone)
 

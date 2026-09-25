@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -71,7 +71,7 @@ class RecoveryService:
             select(User).where(
                 or_(
                     User.username == identifier,
-                    User.email == identifier,
+                    func.lower(User.email) == identifier,
                     User.phone == identifier,
                 )
             )

@@ -15,7 +15,7 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import SessionDep, client_ip, require_roles, user_agent
 from app.core.config import get_settings
@@ -462,7 +462,9 @@ async def bootstrap_owner(
 
     identifier = payload.identifier.strip().lower()
     user = await session.scalar(
-        select(User).where((User.username == identifier) | (User.email == identifier))
+        select(User).where(
+            (User.username == identifier) | (func.lower(User.email) == identifier)
+        )
     )
     if user is None:
         raise NotFoundError(

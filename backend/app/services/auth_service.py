@@ -58,7 +58,7 @@ class AuthService:
     async def register(self, payload: RegisterRequest) -> User:
         clauses = [User.username == payload.username]
         if payload.email:
-            clauses.append(User.email == str(payload.email))
+            clauses.append(func.lower(User.email) == str(payload.email).lower())
         if payload.phone:
             clauses.append(User.phone == payload.phone)
 
@@ -98,7 +98,7 @@ class AuthService:
             select(User).where(
                 or_(
                     User.username == identifier,
-                    User.email == identifier,
+                    func.lower(User.email) == identifier,
                     User.phone == payload.identifier.strip(),
                 )
             )

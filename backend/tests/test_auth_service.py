@@ -194,3 +194,37 @@ async def test_logout_all_revokes_every_session(session):
     assert active == 0
     with pytest.raises(TokenInvalidError):
         await service.refresh(a.tokens.refresh_token)
+
+
+# --- email case -------------------------------------------------------------
+# A phone keyboard capitalises the first letter of an email field on its own.
+# Found on the first real sign-up: registered as "Mehdi…", signed in as
+# "mehdi…", and was refused.
+async def test_email_is_stored_lowercase(session):
+    user = await register_user(session, email="Mixed.Case@Example.com")
+    assert user.email == "mixed.case@example.com"
+
+
+async def test_sign_in_with_email_ignores_case(session):
+    await register_user(session, email="Mixed.Case@Example.com")
+    service = AuthService(session)
+    for typed in ("mixed.case@example.com", "MIXED.CASE@EXAMPLE.COM"):
+        result = await service.login(LoginRequest(identifier=typed, password=PASSWORD))
+        assert result.user.username == "alice"
+
+
+async def test_an_address_stored_before_normalisation_still_signs_in(session):
+    # Rows written before emails were lowercased keep their original case.
+    user = await register_user(session)
+    user.email = "Legacy.User@Example.com"
+    await session.commit()
+    result = await AuthService(session).login(
+        LoginRequest(identifier="legacy.user@example.com", password=PASSWORD)
+    )
+    assert result.user.id == user.id
+
+
+async def test_duplicate_email_is_caught_regardless_of_case(session):
+    await register_user(session, email="dup@example.com")
+    with pytest.raises(ConflictError):
+        await register_user(session, username="bob", email="DUP@Example.com")
