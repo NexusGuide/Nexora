@@ -594,3 +594,56 @@ async def update_plan(
     )
     await session.commit()
     return _envelope(PlanPublic.model_validate(plan), request)
+
+
+# -------------------------------------------------------------------- orders
+OrderAdmin = Annotated[User, Depends(require_roles(AdminRole.MANAGER, AdminRole.FINANCE))]
+
+
+@router.get(
+    "/orders",
+    summary="List orders, newest first, to find the ones waiting for payment",
+)
+async def list_orders(
+    request: Request,
+    session: SessionDep,
+    admin: OrderAdmin,
+    order_status: OrderStatus | None = None,
+    limit: int = 50,
+):
+    """Until a payment gateway exists (phase 6) a customer's order waits as
+    PENDING for someone to confirm the card-to-card payment. This is how that
+    someone finds it: the confirm endpoint needs the order id.
+
+    Only what a person checking a payment needs — who, what, how much, when.
+    No contact details beyond the username, and nothing about the panel.
+    """
+    limit = max(1, min(limit, 200))
+    query = (
+        select(Order, User.username, Plan.name)
+        .join(User, User.id == Order.user_id)
+        .join(Plan, Plan.id == Order.plan_id)
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+    )
+    if order_status is not None:
+        query = query.where(Order.status == order_status)
+
+    rows = (await session.execute(query)).all()
+    return _envelope(
+        [
+            {
+                "id": order.id,
+                "status": order.status.value,
+                "amount": str(order.amount),
+                "currency": order.currency,
+                "username": username,
+                "plan_name": plan_name,
+                "subscription_id": order.subscription_id,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "failure_reason": order.failure_reason,
+            }
+            for order, username, plan_name in rows
+        ],
+        request,
+    )

@@ -9,6 +9,17 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — confirming card-to-card payments
+
+- `GET /api/v1/admin/orders?order_status=PENDING` lists orders newest first
+  with the customer's username, the plan's name and the amount — what someone
+  checking a payment needs, and nothing more (no email, nothing from the
+  panel). Manager and Finance only. Without it, confirming a payment needed an
+  order id that nothing showed.
+- `scripts/orders.sh` lists the waiting orders and confirms the one you have
+  been paid for, after a typed `yes`. Confirmation creates the panel account
+  and the configs through the worker, as before.
+
 ### Fixed — no account could be created from the app
 
 - The "Sign up" link opened a second copy of the sign-in form: the register
