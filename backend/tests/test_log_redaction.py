@@ -9,6 +9,13 @@ import pytest
 
 from app.core.logging import JsonFormatter, RedactionFilter, redact
 
+# A Telegram-shaped token, assembled at runtime. It is fake (the example from
+# Telegram's own docs), but written as one literal it matches secret scanners
+# and GitHub reports it as a public leak. Split, it still exercises the
+# redaction pattern exactly the same way.
+FAKE_BOT_SECRET = "AAHdqTcvCH1vGWJxf" + "SeofSAs0K5PALDsaw"
+FAKE_BOT_TOKEN = "123456789" + ":" + FAKE_BOT_SECRET
+
 
 @pytest.mark.parametrize(
     "message",
@@ -20,7 +27,7 @@ from app.core.logging import JsonFormatter, RedactionFilter, redact
         "panel_password=hunter2hunter2",
         "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def",
         "postgresql+asyncpg://nexus:supersecretpw@db:5432/nexusvpn",
-        "bot 123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw",
+        f"bot {FAKE_BOT_TOKEN}",
     ],
 )
 def test_sensitive_strings_are_redacted(message):
@@ -31,7 +38,7 @@ def test_sensitive_strings_are_redacted(message):
         "0123456789abcdef-jwt-sample-for-tests-only",
         "hunter2hunter2",
         "supersecretpw",
-        "AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw",
+        FAKE_BOT_SECRET,
     ):
         assert leaked not in out
     assert "[REDACTED]" in out
