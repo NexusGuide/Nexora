@@ -233,15 +233,47 @@ included (`MiniJson`), so `XrayConfigTest` runs anywhere. Every configuration
 shape it produces has also been checked with `xray run -test` from the same
 Xray build the library contains.
 
+## Screens
+
+Tabs: **Home** (power button, server, live download/upload speed and a
+one-minute graph, ping, session data, the plan's traffic and expiry),
+**Servers** (search, region and favourite filters, ping per server, details),
+**Stats** (today / week / month, per-day bars, top servers) and **Profile**
+(plan, devices, services, store). Below them: Settings (auto connect, kill
+switch, DNS, routing, per-app routing, appearance, language), connection
+history, connection log, help, about and licences. First launch shows three
+onboarding pages.
+
+Only real data is shown. "Servers" are the configs the panel issued; country
+and region come from the flag in each name; ping is measured on the phone.
+Server load and user counts are not shown because nothing measures them.
+
+Statistics and history are measured on the phone (`UsageStore`, bounded, never
+uploaded) and record server names and byte counts only, never destinations.
+The plan's used/limit comes from the panel and covers every device.
+
+### Settings that reach the tunnel
+
+| Setting | Effect |
+|---|---|
+| DNS | the resolvers in the Xray config (through the tunnel) |
+| Routing | `BYPASS_IRAN` adds the geoip:ir / geosite:category-ir direct rules; `GLOBAL` removes them |
+| App routing | `addAllowedApplication` / `addDisallowedApplication` on the VPN interface; Nexora itself is always outside |
+| Auto connect | connects when the app opens, only if the VPN permission was already granted |
+| Kill switch | opens Android's VPN settings: "Always-on" + "Block connections without VPN" is system-only |
+| Language | Android 13+ per-app language (`locales_config.xml`); older versions follow the phone |
+
+Changes apply on the next connection, and the screens say so while connected.
+
+Help and About show a support channel, privacy policy and terms only when the
+repository variables `SUPPORT_URL`, `PRIVACY_URL` and `TERMS_URL` are set.
+
 ## Not implemented
 
-- **Traffic statistics during a session.** The config enables the counters;
-  nothing reads them yet.
-- **Choosing a server.** Home connects to the subscription's active config.
-  Switching between the configs of a subscription is the next step.
-- **A setting for the Iran bypass.** It is on; there is no switch yet.
 - **Always-on VPN.** When Android starts the service by itself there is no
   configuration in memory, so it stops rather than pretend to connect.
+- **Notifications from the backend** (the bell in the design): there is no
+  notification feed behind it yet.
 
 Payments are phase 6: ordering works, paying goes through an admin's manual
-confirmation.
+confirmation in the web panel.

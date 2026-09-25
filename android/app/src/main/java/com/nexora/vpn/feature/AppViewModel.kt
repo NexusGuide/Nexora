@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.vpn.core.network.SessionEvents
 import com.nexora.vpn.core.security.TokenStore
+import com.nexora.vpn.core.settings.AppSettings
+import com.nexora.vpn.core.settings.Settings
 import com.nexora.vpn.core.vpn.VpnController
 import com.nexora.vpn.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,7 +21,14 @@ class AppViewModel @Inject constructor(
     private val tokenStore: TokenStore,
     sessionEvents: SessionEvents,
     vpn: VpnController,
+    private val appSettings: AppSettings,
 ) : ViewModel() {
+
+    val settings: StateFlow<Settings> = appSettings.settings
+    val settingsLoaded: StateFlow<Boolean> = appSettings.isLoaded
+
+    fun finishOnboarding() = appSettings.setOnboardingDone()
+
 
     val isSignedIn: StateFlow<Boolean> = authRepository.isSignedIn.stateIn(
         scope = viewModelScope,

@@ -74,10 +74,18 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
           API_BASE_URL_DEBUG: ${{ vars.API_BASE_URL_DEBUG }}
+          # Optional public links shown under Help and About. Unset ones are
+          # simply not shown.
+          SUPPORT_URL: ${{ vars.SUPPORT_URL }}
+          PRIVACY_URL: ${{ vars.PRIVACY_URL }}
+          TERMS_URL: ${{ vars.TERMS_URL }}
         run: |
           {
             [ -n "$API_BASE_URL" ] && echo "api.base.url=$API_BASE_URL"
             [ -n "$API_BASE_URL_DEBUG" ] && echo "api.base.url.debug=$API_BASE_URL_DEBUG"
+            [ -n "$SUPPORT_URL" ] && echo "support.url=$SUPPORT_URL"
+            [ -n "$PRIVACY_URL" ] && echo "privacy.url=$PRIVACY_URL"
+            [ -n "$TERMS_URL" ] && echo "terms.url=$TERMS_URL"
           } > local.properties || true
           echo "local.properties:"
           cat local.properties

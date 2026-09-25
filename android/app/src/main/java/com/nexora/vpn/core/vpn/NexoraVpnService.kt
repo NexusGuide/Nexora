@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.nexora.vpn.MainActivity
 import com.nexora.vpn.R
+import com.nexora.vpn.core.settings.AppRoutingMode
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.concurrent.Executors
 import javax.inject.Inject
@@ -70,7 +71,7 @@ class NexoraVpnService : VpnService() {
         interfaceError = null
 
         val descriptor = try {
-            buildInterface(pending.serverName)
+            buildInterface(pending)
         } catch (e: Exception) {
             Log.w(TAG, "establish failed", e)
             interfaceError = e.message
@@ -95,9 +96,9 @@ class NexoraVpnService : VpnService() {
         startInForeground(getString(R.string.vpn_notification_connected, pending.serverName))
     }
 
-    private fun buildInterface(serverName: String): ParcelFileDescriptor? {
+    private fun buildInterface(pending: VpnController.PendingConnection): ParcelFileDescriptor? {
         val builder = Builder()
-            .setSession(serverName)
+            .setSession(pending.serverName)
             .setMtu(XrayConfigBuilder.DEFAULT_MTU)
             // A /30 of private space nothing else on a phone uses.
             .addAddress(TUN_IPV4, 30)
@@ -109,8 +110,9 @@ class NexoraVpnService : VpnService() {
             // Any address works: every packet enters the tunnel, and the core
             // answers port 53 itself.
             .addDnsServer(DNS_ADDRESS)
-            .addDisallowedApplication(packageName)
             .setConfigureIntent(openAppIntent())
+
+        applyAppRouting(builder, pending)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // The tunnel inherits the metered state of the network under it,
@@ -118,6 +120,31 @@ class NexoraVpnService : VpnService() {
             builder.setMetered(false)
         }
         return builder.establish()
+    }
+
+    /**
+     * Which apps the tunnel carries. Android allows either an allow-list or a
+     * deny-list on one interface, never both.
+     *
+     * Nexora itself must never be inside the tunnel: the core's own
+     * connection to the server would loop back into the tunnel it carries.
+     * With a deny-list it is added explicitly; with an allow-list it is
+     * outside simply by not being on it. An app that has been uninstalled
+     * since it was chosen is skipped rather than failing the connection.
+     */
+    private fun applyAppRouting(builder: Builder, pending: VpnController.PendingConnection) {
+        val selected = pending.selectedApps - packageName
+        when {
+            pending.appRouting == AppRoutingMode.ONLY_SELECTED && selected.isNotEmpty() -> {
+                selected.forEach { app -> runCatching { builder.addAllowedApplication(app) } }
+            }
+            else -> {
+                builder.addDisallowedApplication(packageName)
+                if (pending.appRouting == AppRoutingMode.EXCEPT_SELECTED) {
+                    selected.forEach { app -> runCatching { builder.addDisallowedApplication(app) } }
+                }
+            }
+        }
     }
 
     /** Stops the core, closes the interface and reports [finalState]. */

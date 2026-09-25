@@ -40,6 +40,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Public links for Help and About (a Telegram channel, the privacy
+        // policy, the terms). Configuration, not secrets; empty means the
+        // app does not show that entry. Quotes are dropped so a value cannot
+        // break out of the generated Java string.
+        fun link(key: String) = "\"" + localProperties.getProperty(key, "").replace("\"", "") + "\""
+        buildConfigField("String", "SUPPORT_URL", link("support.url"))
+        buildConfigField("String", "PRIVACY_URL", link("privacy.url"))
+        buildConfigField("String", "TERMS_URL", link("terms.url"))
+
         // Persian and English only, so the APK does not carry resources for
         // every locale androidx ships.
         resourceConfigurations += setOf("en", "fa")

@@ -7,5 +7,5 @@
       visible flash of the wrong colour. values-night/ carries the dark
       equivalent.
     -->
-    <color name="launch_background">#F8FAFC</color>
+    <color name="launch_background">#0A111C</color>
 </resources>

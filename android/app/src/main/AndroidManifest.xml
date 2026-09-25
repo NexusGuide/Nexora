@@ -10,7 +10,18 @@
          tunnel is not one of the named types, so it is "special use". -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- Per-app routing lists the apps a person can open. Android 11+ hides
+         other apps unless declared; this asks for launcher apps only, not
+         QUERY_ALL_PACKAGES. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
+        android:localeConfig="@xml/locales_config"
         android:name=".NexoraApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

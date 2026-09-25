@@ -9,6 +9,36 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Changed — the app's new design
+
+- **Dark, teal design** from the product mock-ups, with Light, System and
+  AMOLED themes and six accent colours. Bottom tabs: Home, Servers, Stats,
+  Profile.
+- **Home**: a large power button, the server (tap to change), live
+  download/upload speed with a one-minute graph, ping, session data, the
+  plan's traffic and days left. Disconnecting asks first; a failure shows the
+  underlying message with Retry.
+- **Servers**: search, All / Favourites / region filters (regions from the
+  flag in each config's name), ping for every server, favourites, and a
+  details page with protocol, transport, security and port read from the link.
+  Picking a server while connected moves the tunnel to it.
+- **Stats** (today / week / month, per-day bars, top servers), **History**
+  and a **Connection log** with filters, share and clear — all measured and
+  kept on the phone, bounded, never uploaded, never destinations.
+- **Settings**: auto connect, kill switch (opens Android's VPN settings, where
+  it lives), DNS (Automatic, Cloudflare, Google, Quad9, custom), routing
+  (bypass Iranian sites or everything through the VPN), per-app routing (all,
+  only selected, all except selected), appearance, language (Android 13+).
+  DNS, routing and per-app choices reach the Xray config and the VPN
+  interface.
+- **Profile** with plan, expiry, traffic and devices used/allowed; Help with
+  FAQ and problem reports (the log, sent by the customer); About with the core
+  version and the licence texts; three onboarding pages on first launch.
+- Left out on purpose, because nothing real stands behind them: server load,
+  user counts, "military grade" and similar claims, the notification bell.
+- 8 new JVM tests (server info, traffic counters, usage store, log); 30 in the
+  VPN layer in total.
+
 ### Added — the web admin panel
 
 - **`https://<api domain>/admin`**: a browser panel for the operator, in

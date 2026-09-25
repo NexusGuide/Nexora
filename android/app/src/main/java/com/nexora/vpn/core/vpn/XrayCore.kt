@@ -100,6 +100,18 @@ internal object XrayCore {
 
     val isRunning: Boolean get() = controller?.isRunning == true
 
+    /** "Lib vN, Xray-core vX.Y.Z", for About. */
+    fun version(): String = runCatching { Libv2ray.checkVersionX() }.getOrDefault("—")
+
+    /**
+     * Bytes per outbound since the previous call (the core resets its
+     * counters on each read), as `tag,direction,value;…`, or "" when stopped.
+     */
+    fun queryStats(): String =
+        runCatching { controller?.takeIf { it.isRunning }?.queryAllOutboundTrafficStats() }
+            .getOrNull()
+            .orEmpty()
+
     /** Delay through the running tunnel, in ms, or null if it did not answer. */
     fun measureRunningDelay(): Long? =
         runCatching { controller?.measureDelay(DELAY_TEST_URL) }

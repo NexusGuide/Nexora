@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.vpn.core.common.Outcome
 import com.nexora.vpn.domain.model.Device
+import com.nexora.vpn.domain.model.Subscription
+import com.nexora.vpn.feature.servers.ServerCatalog
 import com.nexora.vpn.domain.model.User
 import com.nexora.vpn.domain.repository.UserRepository
 import com.nexora.vpn.domain.usecase.SignOutUseCase
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 data class ProfileUiState(
     val user: User? = null,
     val devices: List<Device> = emptyList(),
+    val subscription: Subscription? = null,
     val isLoading: Boolean = true,
 )
 
@@ -25,6 +28,7 @@ data class ProfileUiState(
 class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val signOut: SignOutUseCase,
+    private val catalog: ServerCatalog,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -38,10 +42,12 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             val me = userRepository.me()
             val devices = userRepository.devices()
+            if (catalog.state.value.subscription == null) catalog.load()
             _state.update {
                 it.copy(
                     user = me.getOrNull(),
                     devices = devices.getOrNull().orEmpty(),
+                    subscription = catalog.state.value.subscription,
                     isLoading = false,
                 )
             }
