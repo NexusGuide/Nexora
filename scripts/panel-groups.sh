@@ -65,8 +65,10 @@ fi
 
 echo
 green "Panel '$PANEL_NAME'"
-GROUPS=$(curl -sS "$API/api/v1/admin/panels/$PANEL_ID/groups" "${AUTH[@]}")
-echo "$GROUPS" | python3 -c "
+# Not "GROUPS": that is a bash built-in (the shell user's group ids) and
+# assigning to it is silently ignored — the script then parsed "0" as JSON.
+PANEL_GROUPS=$(curl -sS "$API/api/v1/admin/panels/$PANEL_ID/groups" "${AUTH[@]}")
+echo "$PANEL_GROUPS" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 if not d.get('success'):

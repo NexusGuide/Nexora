@@ -18,6 +18,9 @@ change it without a deprecation period.
   the `default_group_ids` column was never created — every panel listing then
   failed with `INTERNAL_ERROR`. `scripts/update.sh` and `scripts/deploy.sh`
   now build `migrate` together with the other images before migrating.
+- `scripts/panel-groups.sh` stored the groups response in `GROUPS`, a bash
+  built-in whose assignment is silently ignored, so it parsed `0` and crashed
+  with `'int' object has no attribute 'get'`. Renamed to `PANEL_GROUPS`.
 
 ### Added — building the Android app in CI
 

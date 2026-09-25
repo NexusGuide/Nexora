@@ -47,8 +47,11 @@ USER nexus
 
 EXPOSE 8000
 
+# The Host header names the first allowed host: TrustedHostMiddleware answers
+# 400 to any other, so a bare request to 127.0.0.1 fails in production and
+# Docker would report a healthy api as unhealthy forever.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+  CMD sh -c 'curl -fsS -H "Host: ${ALLOWED_HOSTS%%,*}" http://127.0.0.1:8000/health' || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
      "--proxy-headers", "--forwarded-allow-ips", "*"]
