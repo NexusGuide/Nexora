@@ -9,6 +9,37 @@ change it without a deprecation period.
 
 ## [Unreleased]
 
+### Added — phase 5: the VPN engine
+
+- **Connect works.** The Android app runs the Xray core
+  (AndroidLibXrayLite v26.9.9, Xray-core v26.9.9) inside a `VpnService`. The
+  Connect button asks for Android's VPN permission once, connects to the
+  subscription's active server, shows a session timer, and a notification with
+  a Disconnect action stays up while the tunnel runs.
+- **`ProxyUri`** parses `vless://`, `vmess://`, `trojan://` and `ss://` (all
+  three encodings) over tcp, tcp+http, ws, grpc, httpupgrade and xhttp, with
+  none, TLS or Reality. Anything the core cannot run — hysteria2, tuic, kcp,
+  Shadowsocks plugins — is refused with a message, not half-configured.
+- **`XrayConfigBuilder`** writes the core's configuration. Traffic enters only
+  through the `tun` inbound: there is no SOCKS or HTTP port on 127.0.0.1 that
+  other apps could use to find the VPN's exit address. DNS is answered by the
+  core and resolved through the proxy. The local network, `.ir` domains and
+  Iranian IP ranges go direct. Release builds run the core with logging off,
+  since its warnings name the sites being visited.
+- **Ping** is measured through the server before connecting, and through the
+  live tunnel once connected.
+- Signing out, or losing the session, disconnects the tunnel.
+- 22 JVM tests for the parser and builder, and every configuration shape they
+  produce was checked with `xray run -test` from the same Xray build.
+- `scripts/fetch-xray-core.sh` downloads the core and refuses it unless its
+  SHA-256 matches the pinned value; the Android workflow runs it, and the build
+  stops with instructions when the file is missing. The 60 MB library is not
+  committed. `NOTICE.md` and `assets/licenses/` carry its LGPL-3.0 and MPL-2.0
+  terms.
+
+Not in this step, and said so in the docs: traffic counters during a session,
+choosing between servers, a switch for the Iran bypass, always-on VPN.
+
 ### Fixed — found on the first real purchase
 
 - **Two orders for one purchase.** Every tap on "Buy" sent a fresh client key,

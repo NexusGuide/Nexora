@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.vpn.core.common.Outcome
 import com.nexora.vpn.core.ui.UiState
+import com.nexora.vpn.core.vpn.VpnController
+import com.nexora.vpn.core.vpn.VpnState
 import com.nexora.vpn.domain.model.Subscription
 import com.nexora.vpn.domain.model.SubscriptionStatus
 import com.nexora.vpn.domain.model.VpnConfig
@@ -17,21 +19,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * Connection state as the UI understands it.
- *
- * Declared now, with only DISCONNECTED reachable, so the Home screen is built
- * against the real shape from the start. Phase 5 supplies a VpnController that
- * drives the rest — nothing here pretends to connect in the meantime.
- */
+/** Connection state as the Home screen draws it, derived from [VpnState]. */
 enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING, ERROR }
 
 data class HomeUiState(
     val subscription: UiState<Subscription?> = UiState.Loading,
     val activeConfig: VpnConfig? = null,
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
-    val sessionSeconds: Long = 0,
+    /** `elapsedRealtime` at connection, for the session timer. */
+    val connectedSinceMs: Long? = null,
     val pingMs: Int? = null,
+    val vpnError: VpnState.Reason? = null,
 ) {
     val primary: Subscription?
         get() = (subscription as? UiState.Content)?.data
@@ -47,6 +45,7 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val getPrimarySubscription: GetPrimarySubscriptionUseCase,
     private val configRepository: ConfigRepository,
+    private val vpn: VpnController,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -54,6 +53,64 @@ class HomeViewModel @Inject constructor(
 
     init {
         load()
+        viewModelScope.launch {
+            vpn.state.collect { vpnState ->
+                _state.update { it.withVpn(vpnState) }
+                // Once connected, the delay that matters is through the tunnel.
+                if (vpnState is VpnState.Connected) measurePing()
+            }
+        }
+    }
+
+    private fun HomeUiState.withVpn(vpnState: VpnState): HomeUiState = when (vpnState) {
+        VpnState.Disconnected -> copy(
+            connection = ConnectionState.DISCONNECTED,
+            connectedSinceMs = null,
+        )
+        is VpnState.Connecting -> copy(connection = ConnectionState.CONNECTING, vpnError = null)
+        is VpnState.Connected -> copy(
+            connection = ConnectionState.CONNECTED,
+            connectedSinceMs = vpnState.sinceElapsedMs,
+            vpnError = null,
+        )
+        VpnState.Disconnecting -> copy(connection = ConnectionState.DISCONNECTING)
+        is VpnState.Failed -> copy(
+            connection = ConnectionState.ERROR,
+            connectedSinceMs = null,
+            vpnError = vpnState.reason,
+        )
+    }
+
+    /**
+     * The permission dialog to show before connecting, or null when Nexora
+     * already may create a VPN. The screen launches it and reports back.
+     */
+    fun permissionIntent() = vpn.permissionIntent()
+
+    /** Connect or disconnect, depending on where the tunnel is. */
+    fun toggleConnection() {
+        when (_state.value.connection) {
+            ConnectionState.CONNECTED, ConnectionState.CONNECTING -> vpn.disconnect()
+            ConnectionState.DISCONNECTING -> Unit
+            ConnectionState.DISCONNECTED, ConnectionState.ERROR -> {
+                val config = _state.value.activeConfig ?: return
+                vpn.connect(config.configData, config.name)
+            }
+        }
+    }
+
+    fun onPermissionDenied() =
+        _state.update { it.copy(vpnError = VpnState.Reason.PERMISSION_DENIED) }
+
+    fun dismissVpnError() = _state.update { it.copy(vpnError = null) }
+
+    private fun measurePing() {
+        val config = _state.value.activeConfig ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(pingMs = null) }
+            val ms = vpn.measureDelay(config.configData)
+            _state.update { it.copy(pingMs = ms) }
+        }
     }
 
     fun load(forceRefresh: Boolean = false) {
@@ -102,13 +159,15 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun loadActiveConfig(subscriptionId: String) {
         when (val result = configRepository.configs(subscriptionId)) {
-            is Outcome.Success ->
+            is Outcome.Success -> {
                 _state.update { current ->
                     current.copy(
                         activeConfig = result.data.firstOrNull { it.isActive }
                             ?: result.data.firstOrNull(),
                     )
                 }
+                measurePing()
+            }
             // A config fetch failure is not worth an error screen: the
             // subscription details above it are still useful.
             is Outcome.Failure -> Unit

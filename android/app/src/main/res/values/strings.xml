@@ -87,7 +87,19 @@
     <string name="home_browse_plans">Browse plans</string>
     <string name="home_setting_up">Setting up your service</string>
     <string name="home_setting_up_body">This usually takes under a minute.</string>
-    <string name="home_vpn_coming">Connecting arrives in the next release</string>
+    <string name="home_disconnect">Disconnect</string>
+    <string name="home_status_disconnecting">Disconnecting…</string>
+    <string name="home_session">Connected for</string>
+    <string name="home_no_config">No server is available for this service yet. Pull down to refresh.</string>
+    <string name="vpn_error_unsupported">This server\'s configuration is not supported by the app.</string>
+    <string name="vpn_error_permission">Nexora needs permission to create a VPN. Tap Connect and allow it.</string>
+    <string name="vpn_error_revoked">Another VPN app took over the connection.</string>
+    <string name="vpn_error_interface">Android would not create the VPN connection. Try again.</string>
+    <string name="vpn_error_core">Could not start the connection with this server. Try another server.</string>
+    <string name="vpn_channel_name">VPN status</string>
+    <string name="vpn_notification_connecting">Connecting…</string>
+    <string name="vpn_notification_connected">Connected to %1$s</string>
+    <string name="vpn_disconnect">Disconnect</string>
 
     <!-- Store -->
     <string name="store_buy">Buy</string>

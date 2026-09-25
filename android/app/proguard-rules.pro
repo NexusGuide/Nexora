@@ -24,3 +24,8 @@
     public static *** v(...);
     public static *** i(...);
 }
+
+# The Xray core is Go code reached through gomobile's JNI bridge; the native
+# side looks these classes up by name.
+-keep class go.** { *; }
+-keep class libv2ray.** { *; }

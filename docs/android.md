@@ -141,9 +141,13 @@ nothing. On a hit it names the file and **not** the match: CI logs are public.
 ### Locally
 
 ```bash
+bash scripts/fetch-xray-core.sh   # once: the pinned Xray core, checksum-verified
 cd android
 ./gradlew :app:assembleDebug      # → app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The Xray core (60 MB of native code) is not in the repository; the build stops
+with the command above if it is missing. See [NOTICE.md](../NOTICE.md).
 
 The Gradle wrapper is committed, so `./gradlew` downloads Gradle 8.11.1 itself
 and no separate Gradle installation is needed. You still need a JDK 17 and the
@@ -179,12 +183,45 @@ build above.
 ./gradlew testDebugUnitTest
 ```
 
-`core/common` is pure Kotlin with no Android imports, so `Formatting` and
-`Validation` are unit-testable without an emulator. `AuthAuthenticatorTest`
+`core/common` and the parser and config builder in `core/vpn` are pure
+Kotlin with no Android imports, so they are unit-testable without an emulator. `AuthAuthenticatorTest`
 uses `MockWebServer` and covers the concurrency case above.
+
+## The VPN engine
+
+`core/vpn` holds it, in three layers:
+
+- **`ProxyUri`** parses the share links the panel hands out — `vless://`,
+  `vmess://`, `trojan://`, `ss://` in its three encodings — over `tcp` (with or
+  without the HTTP header), `ws`, `grpc`, `httpupgrade` and `xhttp`, with no
+  security, TLS or Reality. Anything else is refused with a reason rather
+  than half-configured: `hysteria2`, `tuic`, `kcp`, the removed `h2`
+  transport, and Shadowsocks plugins.
+- **`XrayConfigBuilder`** turns one into an Xray configuration. Traffic enters
+  through a `tun` inbound only — no SOCKS or HTTP port on 127.0.0.1, which any
+  app on the phone could use. DNS is answered by the core and its lookups go
+  through the proxy. The local network, and by default Iranian domains and IP
+  ranges, go direct.
+- **`NexoraVpnService`** creates the interface, excludes Nexora's own traffic
+  from it (otherwise the connection to the server would loop back into the
+  tunnel it carries), hands the file descriptor to the core, and holds the
+  notification. `VpnController` is what screens call; the configuration is
+  passed to the service in memory, never in an Intent.
+
+Both pure-Kotlin layers depend on nothing but the standard library, JSON
+included (`MiniJson`), so `XrayConfigTest` runs anywhere. Every configuration
+shape it produces has also been checked with `xray run -test` from the same
+Xray build the library contains.
 
 ## Not implemented
 
-The VPN engine is phase 5. `VpnController` does not exist yet, and the Connect
-button is disabled with an explanation rather than a fake success (spec rule
-67). Payments are phase 6: ordering works, paying does not.
+- **Traffic statistics during a session.** The config enables the counters;
+  nothing reads them yet.
+- **Choosing a server.** Home connects to the subscription's active config.
+  Switching between the configs of a subscription is the next step.
+- **A setting for the Iran bypass.** It is on; there is no switch yet.
+- **Always-on VPN.** When Android starts the service by itself there is no
+  configuration in memory, so it stops rather than pretend to connect.
+
+Payments are phase 6: ordering works, paying goes through an admin's manual
+confirmation.

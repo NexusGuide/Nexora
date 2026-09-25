@@ -110,12 +110,40 @@ android {
         }
     }
 
+    androidResources {
+        // The core's AAR also ships a China-only GeoIP file this app never
+        // routes by. Android's default ignore list, plus that file.
+        ignoreAssetsPattern =
+            "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~" +
+            ":!geoip-only-cn-private.dat"
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
 }
 
+// The Xray core (AndroidLibXrayLite, LGPL-3.0). Not committed: 60 MB of
+// native code has no place in git history. scripts/fetch-xray-core.sh
+// downloads the pinned release and checks its SHA-256; CI runs the same script.
+val xrayCore = file("libs/libv2ray.aar")
+
+val checkXrayCore by tasks.registering {
+    doLast {
+        if (!xrayCore.exists()) {
+            throw GradleException(
+                "Missing ${xrayCore.path}. Run: bash scripts/fetch-xray-core.sh " +
+                    "(from the repository root). It downloads the pinned Xray core " +
+                    "and verifies its checksum.",
+            )
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkXrayCore) }
+
 dependencies {
+    implementation(files(xrayCore))
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 
     implementation(libs.androidx.core.ktx)

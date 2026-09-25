@@ -212,7 +212,7 @@ database server.
 | 2 | Users, plans, subscriptions, orders | **Done** |
 | 3 | Panel manager, PasarGuard, config system | **Done** |
 | 4 | Android app: login, home, services, store | **Done** (builds in CI) |
-| 5 | VPN engine, Xray/v2rayNG, connect, stats | Not started |
+| 5 | VPN engine (Xray core), connect, ping | **In progress**: connect, ping, notification; traffic stats pending |
 | 6 | Payment, renewal, expiration, notifications | Not started |
 | 7 | Admin panel, RBAC, logs, analytics | Not started |
 | 8 | Multi-panel (X-UI, Marzban), auto server | Not started |
@@ -229,4 +229,5 @@ database server.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The Android app bundles the Xray core under LGPL-3.0 /
+MPL-2.0; see [NOTICE.md](NOTICE.md).

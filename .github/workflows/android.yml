@@ -15,10 +15,12 @@ on:
     tags: ["v*"]
     paths:
       - "android/**"
+      - "scripts/fetch-xray-core.sh"
       - ".github/workflows/android.yml"
   pull_request:
     paths:
       - "android/**"
+      - "scripts/fetch-xray-core.sh"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
@@ -85,6 +87,13 @@ jobs:
       # the workflow not care than to depend on how it was committed.
       - name: Make the wrapper executable
         run: chmod +x ./gradlew
+
+      # The Xray core is not in the repository. This downloads the release the
+      # script pins and fails the build if its SHA-256 differs, so a changed or
+      # tampered upstream file never reaches an APK.
+      - name: Fetch the Xray core
+        working-directory: .
+        run: bash scripts/fetch-xray-core.sh
 
       # Each Gradle step keeps its output, so the step after them can turn a
       # failure into annotations. pipefail matters: without it the exit status

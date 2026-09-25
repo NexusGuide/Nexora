@@ -81,7 +81,19 @@
     <string name="home_browse_plans">مشاهده پلن‌ها</string>
     <string name="home_setting_up">در حال آماده‌سازی سرویس</string>
     <string name="home_setting_up_body">معمولاً کمتر از یک دقیقه طول می‌کشد.</string>
-    <string name="home_vpn_coming">اتصال در نسخه‌ی بعدی اضافه می‌شود</string>
+    <string name="home_disconnect">قطع اتصال</string>
+    <string name="home_status_disconnecting">در حال قطع اتصال…</string>
+    <string name="home_session">مدت اتصال</string>
+    <string name="home_no_config">هنوز سروری برای این سرویس آماده نیست. صفحه را به پایین بکشید تا تازه شود.</string>
+    <string name="vpn_error_unsupported">پیکربندی این سرور توسط اپ پشتیبانی نمی‌شود.</string>
+    <string name="vpn_error_permission">نکسورا برای ساخت VPN به اجازه نیاز دارد. روی اتصال بزنید و اجازه دهید.</string>
+    <string name="vpn_error_revoked">یک اپ VPN دیگر اتصال را در دست گرفت.</string>
+    <string name="vpn_error_interface">اندروید اتصال VPN را نساخت. دوباره امتحان کنید.</string>
+    <string name="vpn_error_core">اتصال با این سرور برقرار نشد. سرور دیگری را امتحان کنید.</string>
+    <string name="vpn_channel_name">وضعیت VPN</string>
+    <string name="vpn_notification_connecting">در حال اتصال…</string>
+    <string name="vpn_notification_connected">متصل به %1$s</string>
+    <string name="vpn_disconnect">قطع اتصال</string>
 
     <!-- Store -->
     <string name="store_buy">خرید</string>

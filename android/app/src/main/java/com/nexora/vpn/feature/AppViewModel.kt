@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.vpn.core.network.SessionEvents
 import com.nexora.vpn.core.security.TokenStore
+import com.nexora.vpn.core.vpn.VpnController
 import com.nexora.vpn.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,6 +18,7 @@ class AppViewModel @Inject constructor(
     authRepository: AuthRepository,
     private val tokenStore: TokenStore,
     sessionEvents: SessionEvents,
+    vpn: VpnController,
 ) : ViewModel() {
 
     val isSignedIn: StateFlow<Boolean> = authRepository.isSignedIn.stateIn(
@@ -31,6 +33,12 @@ class AppViewModel @Inject constructor(
         // sends the user to login.
         viewModelScope.launch {
             sessionEvents.sessionLost.collect { tokenStore.clear() }
+        }
+        // Signing out — or losing the session — ends the tunnel too. A VPN
+        // left running for an account nobody is signed in to is traffic the
+        // customer cannot see or stop from the app.
+        viewModelScope.launch {
+            authRepository.isSignedIn.collect { signedIn -> if (!signedIn) vpn.disconnect() }
         }
     }
 
